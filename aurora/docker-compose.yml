@@ -1,0 +1,14 @@
+services:
+  aurora-app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - aurora-data:/app/.aurora-data
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  aurora-data:
