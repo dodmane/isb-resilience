@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -57,13 +58,17 @@ export function CompanyDiscoveryStage({
         body: JSON.stringify({ companyName }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Discovery failed');
+        return;
+      }
       setDescription(data.profile.companyDescription);
       setIndustry(data.profile.industry);
       setCompanySize(data.profile.companySize);
       setDiscovered(true);
       await onRefresh();
-    } catch (err) {
-      console.error('Discovery failed:', err);
+    } catch (err: any) {
+      toast.error(err.message || 'Discovery failed');
     } finally {
       setDiscovering(false);
     }

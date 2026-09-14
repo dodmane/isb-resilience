@@ -17,20 +17,17 @@ describe('Framework Constants', () => {
     });
   });
 
-  it('should have exactly 4 scenarios', () => {
-    expect(SCENARIOS).toHaveLength(4);
+  it('should have exactly 6 shock injection vectors', () => {
+    expect(SCENARIOS).toHaveLength(6);
   });
 
   it('should have unique scenario keys', () => {
     const keys = SCENARIOS.map((s) => s.key);
-    expect(new Set(keys).size).toBe(4);
+    expect(new Set(keys).size).toBe(6);
   });
 
-  it('should cover all quadrants of the 2x2 matrix', () => {
-    const combos = SCENARIOS.map((s) => `${s.aiDepth}-${s.macroDisruption}`);
-    expect(combos).toContain('high-stable');
-    expect(combos).toContain('high-disruptive');
-    expect(combos).toContain('low-stable');
-    expect(combos).toContain('low-disruptive');
+  it('should include AI Disruption & Commodity Shock vector', () => {
+    const keys = SCENARIOS.map((s) => s.key);
+    expect(keys).toContain('ai_disruption_commodity');
   });
 });

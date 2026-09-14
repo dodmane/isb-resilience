@@ -70,6 +70,17 @@ export default function AssessmentPage() {
     }
   }, [fetchData]);
 
+  async function toggleMockData() {
+    if (!assessment) return;
+    const updatedMock = !assessment.useMockData;
+    await fetch(`/api/assessments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ useMockData: updatedMock }),
+    });
+    await fetchData();
+  }
+
   if (loading || !assessment) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -92,7 +103,21 @@ export default function AssessmentPage() {
           </Link>
           <span className="text-white/40">|</span>
           <span className="font-medium text-white/90">{assessment.companyName}</span>
-          <span className="ml-auto text-xs text-white/50">{assessment.assessmentLens}</span>
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              onClick={toggleMockData}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors flex items-center gap-1.5 font-medium ${
+                assessment.useMockData
+                  ? 'bg-amber-400/20 text-amber-200 border-amber-400/40 hover:bg-amber-400/30'
+                  : 'bg-emerald-400/20 text-emerald-200 border-emerald-400/40 hover:bg-emerald-400/30'
+              }`}
+              title="Click to toggle between LLM API and Mock Data mode"
+            >
+              <span className={`w-2 h-2 rounded-full ${assessment.useMockData ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+              {assessment.useMockData ? 'Mock Data: ON' : 'LLM API: ON (Default)'}
+            </button>
+            <span className="text-xs text-white/50">{assessment.assessmentLens}</span>
+          </div>
         </div>
       </header>
       <div className="border-b bg-background">

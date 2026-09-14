@@ -38,8 +38,8 @@ describe('Phase 4: Scenario Stress Test Store', () => {
         scenarioKey: scenario.key,
         dimensionKey: 'revenue_durability',
         baseMaturity: 3,
-        scenarioMaturity: scenario.key === 'exposed_and_reactive' ? 2 : 3,
-        direction: scenario.key === 'exposed_and_reactive' ? 'weakens' : 'stable',
+        scenarioMaturity: scenario.key === 'revenue_compression' ? 2 : 3,
+        direction: scenario.key === 'revenue_compression' ? 'weakens' : 'stable',
         rationale: `Test rationale for ${scenario.name}`,
         confidence: 'medium',
         relevantEvidenceIds: [],
@@ -53,17 +53,19 @@ describe('Phase 4: Scenario Stress Test Store', () => {
     }
 
     const all = getScenarioAssessments(assessmentId);
-    expect(all.length).toBe(4);
+    expect(all.length).toBe(6);
   });
 
-  it('should store all 4 charter-defined scenario keys', () => {
+  it('should store all 6 factor-based shock injection vector keys', () => {
     const all = getScenarioAssessments(assessmentId);
     const keys = [...new Set(all.map(a => a.scenarioKey))];
     expect(keys.sort()).toEqual([
-      'autonomous_advantage',
-      'exposed_and_reactive',
-      'managed_modernization',
-      'storm_and_signal',
+      'ai_disruption_commodity',
+      'capital_market_freeze',
+      'cloud_cyber_outage',
+      'cogs_margin_squeeze',
+      'revenue_compression',
+      'talent_attrition',
     ]);
   });
 
@@ -90,7 +92,7 @@ describe('Phase 4: Scenario Stress Test Store', () => {
 
   it('should allow override with mandatory reason', () => {
     const all = getScenarioAssessments(assessmentId);
-    const target = all.find(s => s.scenarioKey === 'storm_and_signal');
+    const target = all.find(s => s.scenarioKey === 'cloud_cyber_outage');
     expect(target).toBeDefined();
 
     const overridden: ScenarioAssessment = {
@@ -105,7 +107,7 @@ describe('Phase 4: Scenario Stress Test Store', () => {
     upsertScenarioAssessment(overridden);
 
     const refreshed = getScenarioAssessments(assessmentId);
-    const found = refreshed.find(s => s.scenarioKey === 'storm_and_signal');
+    const found = refreshed.find(s => s.scenarioKey === 'cloud_cyber_outage');
     expect(found?.scenarioMaturity).toBe(1);
     expect(found?.overrideReason).toContain('cyber exposure');
     expect(found?.userApproved).toBe(true);

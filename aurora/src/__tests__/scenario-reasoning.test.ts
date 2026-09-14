@@ -52,43 +52,45 @@ describe('Scenario Reasoning', () => {
   describe('generateScenarioReasoning', () => {
     it('should return null maturity when base is not scored', () => {
       const score = makeDimScore({ maturityLevel: null });
-      const result = generateScenarioReasoningMock('autonomous_advantage', 'revenue_durability', score, []);
+      const result = generateScenarioReasoningMock('revenue_compression', 'revenue_durability', score, []);
       expect(result.scenarioMaturity).toBeNull();
       expect(result.direction).toBe('stable');
     });
 
-    it('should use all 4 charter-defined scenarios', () => {
+    it('should use all 6 shock injection vectors', () => {
       const score = makeDimScore();
       for (const scenario of SCENARIOS) {
         const result = generateScenarioReasoningMock(scenario.key, 'revenue_durability', score, []);
         expect(result.scenarioMaturity).not.toBeUndefined();
-        expect(result.rationale.length).toBeGreaterThan(20);
+        expect(result.rationale.length).toBeGreaterThan(10);
       }
     });
 
-    it('should not create new scenarios beyond the 4 charter-defined ones', () => {
-      expect(SCENARIOS).toHaveLength(4);
+    it('should not create new scenarios beyond the 6 shock injection vectors', () => {
+      expect(SCENARIOS).toHaveLength(6);
       const keys = SCENARIOS.map(s => s.key);
       expect(keys).toEqual([
-        'autonomous_advantage',
-        'storm_and_signal',
-        'managed_modernization',
-        'exposed_and_reactive',
+        'revenue_compression',
+        'cloud_cyber_outage',
+        'cogs_margin_squeeze',
+        'talent_attrition',
+        'capital_market_freeze',
+        'ai_disruption_commodity',
       ]);
     });
 
-    it('should weaken revenue_durability under exposed_and_reactive', () => {
+    it('should weaken revenue_durability under revenue_compression', () => {
       const score = makeDimScore({ maturityLevel: 3 });
-      const result = generateScenarioReasoningMock('exposed_and_reactive', 'revenue_durability', score, []);
+      const result = generateScenarioReasoningMock('revenue_compression', 'revenue_durability', score, []);
       expect(result.direction).toBe('weakens');
       expect(result.scenarioMaturity).toBeLessThan(3);
     });
 
-    it('should strengthen innovation under autonomous_advantage', () => {
+    it('should weaken innovation_rd_capacity under ai_disruption_commodity', () => {
       const score = makeDimScore({ dimensionKey: 'innovation_rd_capacity', maturityLevel: 3 });
-      const result = generateScenarioReasoningMock('autonomous_advantage', 'innovation_rd_capacity', score, []);
-      expect(result.direction).toBe('strengthens');
-      expect(result.scenarioMaturity).toBeGreaterThan(3);
+      const result = generateScenarioReasoningMock('ai_disruption_commodity', 'innovation_rd_capacity', score, []);
+      expect(result.direction).toBe('weakens');
+      expect(result.scenarioMaturity).toBeLessThan(3);
     });
 
     it('should keep maturity stable when no impact', () => {

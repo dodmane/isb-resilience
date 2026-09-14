@@ -29,68 +29,77 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const assessment = getAssessment(id);
-  if (!assessment) {
-    return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
-  }
-
-  const evidence = getEvidenceForAssessment(id);
-  const existing = getSubdivisionScores(id);
-  const deepDims = (assessment.dimensionSelections || []).filter(s => s.deepAssessment);
-  const now = new Date().toISOString();
-  const newScores: SubdivisionScore[] = [];
-
-  for (const dimSel of deepDims) {
-    const subs = SUBDIVISIONS[dimSel.dimensionKey as DimensionKey] || [];
-    for (const sub of subs) {
-      const alreadyScored = existing.find(
-        s => s.dimensionKey === dimSel.dimensionKey && s.subdivisionKey === sub.key && s.status === 'overridden'
-      );
-      if (alreadyScored) continue;
-
-      const subEvidence = evidence.filter(
-        e => e.dimensionKey === dimSel.dimensionKey && e.subdivisionKey === sub.key
-      );
-
-      const recommendation = await recommendSubdivisionScoreAsync(dimSel.dimensionKey, sub.key, subEvidence);
-
-      const score: SubdivisionScore = {
-        id: uuidv4(),
-        assessmentId: id,
-        dimensionKey: dimSel.dimensionKey,
-        subdivisionKey: sub.key,
-        maturityLevel: recommendation.maturityLevel,
-        normalizedScore: recommendation.maturityLevel ? normalize(recommendation.maturityLevel) : null,
-        confidence: recommendation.confidence,
-        status: recommendation.status,
-        rationale: recommendation.rationale,
-        overrideReason: null,
-        evidenceIds: subEvidence.filter(e => e.status === 'accepted').map(e => e.id),
-        isMockRecommendation: !isLLMConfigured(),
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      upsertSubdivisionScore(score);
-      newScores.push(score);
+  try {
+    const { id } = await params;
+    const assessment = getAssessment(id);
+    if (!assessment) {
+      return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
     }
+
+    const evidence = getEvidenceForAssessment(id);
+    const existing = getSubdivisionScores(id);
+    const deepDims = (assessment.dimensionSelections || []).filter(s => s.deepAssessment);
+    const now = new Date().toISOString();
+    const newScores: SubdivisionScore[] = [];
+
+    for (const dimSel of deepDims) {
+      const subs = SUBDIVISIONS[dimSel.dimensionKey as DimensionKey] || [];
+      for (const sub of subs) {
+        const alreadyScored = existing.find(
+          s => s.dimensionKey === dimSel.dimensionKey && s.subdivisionKey === sub.key && s.status === 'overridden'
+        );
+        if (alreadyScored) continue;
+
+        const subEvidence = evidence.filter(
+          e => e.dimensionKey === dimSel.dimensionKey && e.subdivisionKey === sub.key
+        );
+
+        const recommendation = await recommendSubdivisionScoreAsync(
+          dimSel.dimensionKey,
+          sub.key,
+          subEvidence,
+          Boolean(assessment.useMockData)
+        );
+
+        const score: SubdivisionScore = {
+          id: uuidv4(),
+          assessmentId: id,
+          dimensionKey: dimSel.dimensionKey,
+          subdivisionKey: sub.key,
+          maturityLevel: recommendation.maturityLevel,
+          normalizedScore: recommendation.maturityLevel ? normalize(recommendation.maturityLevel) : null,
+          confidence: recommendation.confidence,
+          status: recommendation.status,
+          rationale: recommendation.rationale,
+          overrideReason: null,
+          evidenceIds: subEvidence.filter(e => e.status === 'accepted').map(e => e.id),
+          isMockRecommendation: Boolean(assessment.useMockData),
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        upsertSubdivisionScore(score);
+        newScores.push(score);
+      }
+    }
+
+    addAuditEntry({
+      id: uuidv4(),
+      assessmentId: id,
+      action: 'subdivision_scoring_generated',
+      entityType: 'assessment',
+      entityId: id,
+      oldValue: null,
+      newValue: { generatedCount: newScores.length },
+      reason: assessment.useMockData ? 'Subdivision scoring recommendations generated via Mock Data' : 'Subdivision scoring recommendations generated via LLM',
+      actor: 'system',
+      timestamp: now,
+    });
+
+    return NextResponse.json(newScores);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Subdivision scoring failed' }, { status: 500 });
   }
-
-  addAuditEntry({
-    id: uuidv4(),
-    assessmentId: id,
-    action: 'subdivision_scoring_generated',
-    entityType: 'assessment',
-    entityId: id,
-    oldValue: null,
-    newValue: { generatedCount: newScores.length },
-    reason: 'Subdivision scoring recommendations generated via mock AI',
-    actor: 'system',
-    timestamp: now,
-  });
-
-  return NextResponse.json(newScores);
 }
 
 // Update a single subdivision score (override)

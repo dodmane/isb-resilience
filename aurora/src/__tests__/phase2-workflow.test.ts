@@ -104,15 +104,17 @@ describe('Phase 2 Workflow Integration', () => {
 
   it('should store scenario narratives on assessment', () => {
     const narratives = {
-      autonomous_advantage: 'Test narrative 1',
-      storm_and_signal: 'Test narrative 2',
-      managed_modernization: 'Test narrative 3',
-      exposed_and_reactive: 'Test narrative 4',
+      revenue_compression: 'Test narrative 1',
+      cloud_cyber_outage: 'Test narrative 2',
+      cogs_margin_squeeze: 'Test narrative 3',
+      talent_attrition: 'Test narrative 4',
+      capital_market_freeze: 'Test narrative 5',
+      ai_disruption_commodity: 'Test narrative 6',
     };
 
     updateAssessment(assessmentId, { scenarioNarratives: narratives });
     const updated = getAssessment(assessmentId);
-    expect(Object.keys(updated?.scenarioNarratives || {})).toHaveLength(4);
+    expect(Object.keys(updated?.scenarioNarratives || {})).toHaveLength(6);
   });
 
   it('should not allow stage 5 approval before stage 4 is approved', () => {

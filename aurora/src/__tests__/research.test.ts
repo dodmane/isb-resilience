@@ -15,7 +15,7 @@ describe('Evidence Research', () => {
       },
     ];
 
-    const result = await researchEvidence(assessmentId, 'Salesforce', plan, []);
+    const result = await researchEvidence(assessmentId, 'Salesforce', plan, [], true);
     expect(result.evidence.length).toBeGreaterThan(0);
     expect(result.evidence[0].dimensionKey).toBe('revenue_durability');
     expect(result.evidence[0].subdivisionKey).toBe('retention_nrr');
@@ -34,7 +34,7 @@ describe('Evidence Research', () => {
       },
     ];
 
-    const result = await researchEvidence(assessmentId, 'DocuSign', plan, []);
+    const result = await researchEvidence(assessmentId, 'DocuSign', plan, [], true);
     expect(result.evidence.length).toBeGreaterThan(0);
     expect(result.evidence[0].sourceUrl).toBeTruthy();
     expect(result.evidence[0].urlResolved).toBe(true);
@@ -51,7 +51,7 @@ describe('Evidence Research', () => {
       },
     ];
 
-    const result = await researchEvidence(assessmentId, 'Unknown Corp', plan, []);
+    const result = await researchEvidence(assessmentId, 'Unknown Corp', plan, [], true);
     expect(result.evidence.length).toBeGreaterThan(0);
     expect(result.evidence[0].isMock).toBe(true);
     expect(result.evidence[0].sourceUrl).toBeNull();
@@ -92,7 +92,7 @@ describe('Evidence Research', () => {
       createdAt: new Date().toISOString(),
     }];
 
-    const result = await researchEvidence(assessmentId, 'Unknown Corp', plan, existingEvidence);
+    const result = await researchEvidence(assessmentId, 'Unknown Corp', plan, existingEvidence, true);
     expect(result.evidence.length).toBe(0);
   });
 
@@ -130,7 +130,7 @@ describe('Evidence Research', () => {
       createdAt: new Date().toISOString(),
     }];
 
-    const result = await researchEvidence(assessmentId, 'Unknown Corp', plan, existingEvidence);
+    const result = await researchEvidence(assessmentId, 'Unknown Corp', plan, existingEvidence, true);
     expect(result.evidence.length).toBeGreaterThan(0);
   });
 
@@ -145,7 +145,7 @@ describe('Evidence Research', () => {
       },
     ];
 
-    const result = await researchEvidence(assessmentId, 'Unknown Corp', plan, []);
+    const result = await researchEvidence(assessmentId, 'Unknown Corp', plan, [], true);
     // Should have evidence for all 3 subdivisions
     expect(result.evidence.length).toBe(3);
     const subKeys = result.evidence.map(e => e.subdivisionKey);
@@ -158,7 +158,16 @@ describe('Evidence Research', () => {
     const plan: EvidencePlanItem[] = [
       { dimensionKey: 'revenue_durability', subdivisionKey: null, searchTargets: [], sourceTypes: [], notes: '' },
     ];
-    const result = await researchEvidence(assessmentId, 'TestCo', plan, []);
+    const result = await researchEvidence(assessmentId, 'TestCo', plan, [], true);
     expect(result.searchSummary).toContain('TestCo');
+  });
+
+  it('should throw error when LLM is not configured and useMockData is false', async () => {
+    const plan: EvidencePlanItem[] = [
+      { dimensionKey: 'revenue_durability', subdivisionKey: null, searchTargets: [], sourceTypes: [], notes: '' },
+    ];
+    await expect(researchEvidence(assessmentId, 'TestCo', plan, [], false)).rejects.toThrow(
+      'LLM API key is not configured'
+    );
   });
 });

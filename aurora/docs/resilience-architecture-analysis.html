@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AURORA Resilience Framework — Architectural Analysis & Redesign Proposal</title>
+  <style>
+    :root {
+      --primary: #0f172a;
+      --primary-accent: #2563eb;
+      --secondary-accent: #0284c7;
+      --accent-light: #eff6ff;
+      --success: #059669;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --bg-slate: #f8fafc;
+      --card-bg: #ffffff;
+      --border-color: #e2e8f0;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background-color: var(--bg-slate);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Executive Header */
+    .header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #ffffff;
+      padding: 2.5rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+      margin-bottom: 2rem;
+    }
+
+    .header-badge {
+      display: inline-block;
+      background: rgba(37, 99, 235, 0.3);
+      border: 1px solid rgba(147, 197, 253, 0.4);
+      color: #93c5fd;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .header h1 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      line-height: 1.2;
+    }
+
+    .header p {
+      color: #94a3b8;
+      font-size: 1.1rem;
+    }
+
+    .meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #334155;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+    }
+
+    .meta-item strong {
+      color: #ffffff;
+    }
+
+    /* Layout grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .col-12 { grid-column: span 12; }
+    .col-8 { grid-column: span 8; }
+    .col-6 { grid-column: span 6; }
+    .col-4 { grid-column: span 4; }
+
+    @media (max-width: 900px) {
+      .col-8, .col-6, .col-4 { grid-column: span 12; }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.75rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+    }
+
+    .card-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-title .icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--accent-light);
+      color: var(--primary-accent);
+      font-size: 1rem;
+    }
+
+    /* Summary Box */
+    .summary-box {
+      background: #f0f9ff;
+      border-left: 4px solid var(--secondary-accent);
+      padding: 1.25rem;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1.5rem;
+    }
+
+    .summary-box p {
+      font-size: 1.05rem;
+      color: #0369a1;
+      font-weight: 500;
+    }
+
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+      margin-top: 1rem;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+      text-align: left;
+    }
+
+    th {
+      background: #f1f5f9;
+      color: var(--primary);
+      font-weight: 600;
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:nth-child(even) {
+      background-color: #fafafa;
+    }
+
+    /* Flaws & Callouts */
+    .flaw-list {
+      list-style: none;
+    }
+
+    .flaw-item {
+      position: relative;
+      padding-left: 2rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .flaw-item::before {
+      content: "✕";
+      position: absolute;
+      left: 0;
+      top: 2px;
+      width: 22px;
+      height: 22px;
+      background: #fee2e2;
+      color: var(--danger);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .flaw-item h4 {
+      font-size: 1.05rem;
+      color: var(--primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .flaw-item p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    /* Solution Items */
+    .solution-list {
+      list-style: none;
+    }
+
+    .solution-item {
+      position: relative;
+      padding-left: 2rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .solution-item::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 2px;
+      width: 22px;
+      height: 22px;
+      background: #d1fae5;
+      color: var(--success);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .solution-item h4 {
+      font-size: 1.05rem;
+      color: var(--primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .solution-item p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    /* Formula Box */
+    .formula-box {
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 1.25rem;
+      border-radius: 8px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 0.95rem;
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+
+    .formula-box .highlight {
+      color: #38bdf8;
+      font-weight: bold;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .badge-danger { background: #fee2e2; color: #991b1b; }
+    .badge-warning { background: #fef3c7; color: #92400e; }
+    .badge-success { background: #d1fae5; color: #065f46; }
+    .badge-info { background: #e0f2fe; color: #075985; }
+
+    /* Comparison Diagram */
+    .diagram-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin: 1rem 0;
+    }
+
+    .diagram-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .diagram-box {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .diagram-arrow {
+      color: var(--text-muted);
+      font-weight: bold;
+    }
+
+    /* Matrix Table */
+    .matrix-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 1rem;
+    }
+
+    .matrix-cell {
+      background: #ffffff;
+      padding: 1.25rem;
+    }
+
+    .matrix-cell.header-cell {
+      background: #f1f5f9;
+      font-weight: 700;
+      color: var(--primary);
+      text-align: center;
+    }
+
+    .matrix-cell h5 {
+      font-size: 1rem;
+      color: var(--primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .matrix-cell p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .footer {
+      text-align: center;
+      padding: 2rem 0;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      border-top: 1px solid var(--border-color);
+      margin-top: 3rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- Executive Header -->
+    <header class="header">
+      <span class="header-badge">McKinsey & Co. & Principal Architect Executive Analysis</span>
+      <h1>AURORA Resilience Framework</h1>
+      <p>Comprehensive Architectural Evaluation & Proposed Target-State Resilience Engine</p>
+      
+      <div class="meta-bar">
+        <div class="meta-item">Author: <strong>Principal Architect & Senior Resilience Analyst</strong></div>
+        <div class="meta-item">Date: <strong>September 14, 2026</strong></div>
+        <div class="meta-item">Target System: <strong>AURORA Scoring & Stress Testing Engine</strong></div>
+        <div class="meta-item">Domain: <strong>Enterprise SaaS Resilience</strong></div>
+      </div>
+    </header>
+
+    <!-- Executive Summary -->
+    <div class="grid">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">💡</span> Executive Summary & Core Findings
+          </div>
+          <div class="summary-box">
+            
+          </div>
+          <p>This report provides an analyst and architectural review across three core pillars:</p>
+          <ul style="margin-left: 1.5rem; margin-top: 0.75rem; color: var(--text-main);">
+            <li><strong>Current Scoring Mechanics:</strong> Why simple arithmetic unweighted averages and integer rounding fail to model corporate bottleneck risk (Liebig's Law of the Minimum).</li>
+            <li><strong>15 Dimensions & Stress Testing:</strong> Why the 2&times;2 "AI vs Macro" matrix is macro forecasting (not shock stress testing) and how to streamline the 15 dimensions for SaaS.</li>
+            <li><strong>SaaS Benchmarking vs. Shock Testing:</strong> Synthesizing SaaS Industry Peer Benchmarking (Starting Position) with Factor-Based Shock Injection (Shock Absorption).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Critique & Comparison of Scoring Engine -->
+    <div class="grid">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">🔍</span> 1. Old vs. Refined McKinsey Capstone Scoring Methodology
+          </div>
+
+          <p style="margin-bottom: 1rem;">
+            As an ISB EPBM Capstone project, maintaining stability across your core scope is essential. 
+            The refined methodology <strong>retains all 15 charter dimensions and the core 1–4 maturity rubric</strong>, but upgrades the scoring engine from rigid integer rounding to continuous precision and evidence-based risk adjustment.
+          </p>
+
+          <div class="grid" style="margin-bottom: 1.5rem;">
+            <div class="col-6">
+              <div style="background: #fff1f2; border: 1px solid #fecdd3; padding: 1.25rem; border-radius: 8px; height: 100%;">
+                <h4 style="color: #9f1239; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <span class="badge badge-danger">OLD METHODOLOGY</span> Step-Function Integer Engine
+                </h4>
+                <ul class="flaw-list" style="margin-top: 0.75rem;">
+                  <li class="flaw-item">
+                    <h4>Intermediate Integer Rounding</h4>
+                    <p>Subdivision averages are forcibly rounded to discrete integers (1, 2, 3, 4), creating artificial performance cliff jumps (e.g., 2.67 &rarr; 3.0).</p>
+                  </li>
+                  <li class="flaw-item">
+                    <h4>Coarse Bucket Midpoints</h4>
+                    <p>Maps level integers to fixed midpoints (Level 1 = 33, Level 2 = 58, Level 3 = 78, Level 4 = 95), treating a weak Level 3 (2.67) identical to a strong Level 3 (3.33).</p>
+                  </li>
+                  <li class="flaw-item">
+                    <h4>Ignored Confidence Scores</h4>
+                    <p>Confidence (High/Med/Low) is tracked as decorative metadata and never affects the mathematical score.</p>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="col-6">
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1.25rem; border-radius: 8px; height: 100%;">
+                <h4 style="color: #166534; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <span class="badge badge-success">REFINED MCKINSEY METHOD</span> Continuous & Risk-Adjusted
+                </h4>
+                <ul class="solution-list" style="margin-top: 0.75rem;">
+                  <li class="solution-item">
+                    <h4>Exact Decimal Maturity (M between 1.00 and 4.00)</h4>
+                    <p>Preserves exact continuous average (M = Average of Subdivision Scores), accurately capturing fractional progress (e.g., 2.67 = Strong Developing).</p>
+                  </li>
+                  <li class="solution-item">
+                    <h4>Continuous Linear 0–100 Scaling</h4>
+                    <p>Uses exact linear transformation: <code>Score = 25 + [(M - 1.0) / 3.0] &times; 75</code>, giving an accurate 0–100 representation.</p>
+                  </li>
+                  <li class="solution-item">
+                    <h4>Risk-Adjusted Confidence Discounting</h4>
+                    <p>Applies source-authority multiplier (High = 1.00, Medium = 0.85, Low = 0.70) to calculate <code>Adjusted Score = Nominal Score &times; Confidence Multiplier</code>.</p>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Concrete Worked Example -->
+          <h4 style="color: var(--primary); margin-top: 1.5rem; margin-bottom: 0.75rem;">Step-by-Step Worked Example: "Acme Cloud SaaS" (Revenue Durability)</h4>
+          <p style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Evaluating <strong>Revenue Durability</strong> across its 3 subdivisions for a sample company with mixed evidence quality:
+          </p>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Subdivision</th>
+                  <th>Evidence Gathered</th>
+                  <th>Subdivision Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>1. Retention & NRR</strong></td>
+                  <td>10-K SEC Filing shows NRR = 112% (Established)</td>
+                  <td><span class="badge badge-success">Level 3</span></td>
+                </tr>
+                <tr>
+                  <td><strong>2. Customer Concentration & Demand</strong></td>
+                  <td>Top 3 clients account for 45% of total ARR (High Risk)</td>
+                  <td><span class="badge badge-warning">Level 2</span></td>
+                </tr>
+                <tr>
+                  <td><strong>3. Pricing Power & Mix</strong></td>
+                  <td>Multi-year contracts with 5% annual escalators</td>
+                  <td><span class="badge badge-success">Level 3</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Calculation Comparison Table -->
+          <div class="table-container" style="margin-top: 1.5rem;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>OLD Engine Calculation</th>
+                  <th>REFINED McKinsey Engine Calculation</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>1. Maturity Average</strong></td>
+                  <td>(3 + 2 + 3) / 3 = 2.667 &rarr; <strong>Rounded to Level 3</strong></td>
+                  <td>(3 + 2 + 3) / 3 = <strong>2.67 (Exact Continuous Maturity)</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>2. Maturity Label</strong></td>
+                  <td><span class="badge badge-success">Established (Level 3)</span></td>
+                  <td><span class="badge badge-info">Strong Developing (Level 2.67)</span></td>
+                </tr>
+                <tr>
+                  <td><strong>3. 0–100 Score</strong></td>
+                  <td><strong>78.0 / 100</strong> (Static Midpoint of Level 3)</td>
+                  <td>25 + [(2.67 - 1.0) / 3.0] &times; 75 = <strong>66.8 / 100</strong></td>
+                </tr>
+                <tr>
+                  <td><strong>4. Confidence Discounting</strong></td>
+                  <td>Tagged as "High" (Ignored in mathematical score)</td>
+                  <td>
+                    • High Conf (Audited 10-K): 66.8 &times; 1.00 = <strong>66.8 / 100</strong><br>
+                    • Med Conf (Press Release): 66.8 &times; 0.85 = <strong>56.8 / 100</strong><br>
+                    • Low Conf (Blog Post): 66.8 &times; 0.70 = <strong>46.8 / 100</strong>
+                  </td>
+                </tr>
+                <tr style="background: #f8fafc;">
+                  <td><strong>Analytical Result</strong></td>
+                  <td><span style="color: var(--danger); font-weight: 600;">Overinflates score to 78.0</span> and hides concentration risk.</td>
+                  <td><span style="color: var(--success); font-weight: 600;">Accurately reflects 66.8 score</span> and penalizes unverified evidence.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Why this makes sense for ISB Capstone -->
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 1.5rem; border-radius: 8px; margin-top: 1.5rem;">
+            <h4 style="color: #1e40af; margin-bottom: 0.5rem;">🎓 Why This Refined Methodology Makes Sense for your ISB Capstone</h4>
+            <ul style="margin-left: 1.25rem; font-size: 0.95rem; color: #1e3a8a; line-height: 1.6;">
+              <li><strong>Zero Scope Disruption:</strong> Maintains all 15 charter dimensions and the core 1–4 maturity rubric without requiring code or architectural overhauls.</li>
+              <li><strong>Academic Defensibility:</strong> Faculty and panel evaluators frequently challenge arbitrary integer rounding (2.67 &rarr; 3.0). Continuous decimal precision (2.67) is mathematically bulletproof.</li>
+              <li><strong>Evidence Accountability:</strong> Introducing an explicit Confidence Multiplier (High = 1.00, Medium = 0.85, Low = 0.70) proves that your platform rewards rigorous primary research over unverified online claims.</li>
+              <li><strong>McKinsey-Grade Rigor:</strong> Dual reporting (Nominal Score vs. Risk-Adjusted Score) reflects standard corporate risk advisory practices.</li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Layman's Explanation Section -->
+    <div class="grid">
+      <div class="col-12">
+        <div class="card" style="background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); border: 2px solid #3b82f6;">
+          <div class="card-title" style="color: #1d4ed8;">
+            <span class="icon" style="background: #dbeafe; color: #1d4ed8;">🗣️</span> Simple Plain-English Guide (Scoring Explained in Layman's Terms)
+          </div>
+
+          <p style="font-size: 1.05rem; color: var(--text-main); margin-bottom: 1.25rem; font-weight: 500;">
+            Imagine you are evaluating a company's health just like a doctor evaluating a patient's physical fitness. Here is how the old system worked versus how our new simple, fair system works:
+          </p>
+
+          <div class="grid" style="margin-top: 1rem; margin-bottom: 1.5rem;">
+            <div class="col-6">
+              <div style="background: #ffffff; border: 1px solid #fca5a5; padding: 1.25rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h4 style="color: #b91c1c; margin-bottom: 0.75rem; font-size: 1.1rem;">🔴 The Old System: The "School Report Card Rounding" Problem</h4>
+                <p style="font-size: 0.95rem; color: var(--text-main); line-height: 1.6;">
+                  Think of a student who gets <strong>A (3.0)</strong> in Math, <strong>C (2.0)</strong> in Science, and <strong>A (3.0)</strong> in History. Their real average grade is a <strong>B (2.67)</strong>.
+                </p>
+                <div style="background: #fee2e2; border-left: 3px solid #ef4444; padding: 0.75rem; margin-top: 0.75rem; border-radius: 0 4px 4px 0; font-size: 0.9rem; color: #7f1d1d;">
+                  <strong>The Old Flaw:</strong> The system rounded 2.67 up to a flat 3.0 and gave the student an "A" (78%). It hid the fact that the student was struggling in Science!
+                </div>
+              </div>
+            </div>
+
+            <div class="col-6">
+              <div style="background: #ffffff; border: 1px solid #86efac; padding: 1.25rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <h4 style="color: #15803d; margin-bottom: 0.75rem; font-size: 1.1rem;">🟢 The New System: The "Fair Digital Scale" Solution</h4>
+                <p style="font-size: 0.95rem; color: var(--text-main); line-height: 1.6;">
+                  Instead of rounding, our new scale works like a digital bathroom scale. If you weigh 66.8 kg, it shows exactly <strong>66.8 kg</strong>—it doesn't round you up to 78 kg!
+                </p>
+                <div style="background: #dcfce7; border-left: 3px solid #22c55e; padding: 0.75rem; margin-top: 0.75rem; border-radius: 0 4px 4px 0; font-size: 0.9rem; color: #14532d;">
+                  <strong>The New Fix:</strong> The company gets a score of exactly <strong>66.8%</strong>. Every small effort to improve counts, and weak areas aren't hidden!
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3 Simple Rules -->
+          <h4 style="color: var(--primary); margin-bottom: 0.75rem; font-size: 1.1rem;">The 3 Everyday Rules of the New Scoring System:</h4>
+          
+          <div class="grid" style="margin-bottom: 0;">
+            <div class="col-4">
+              <div style="background: #ffffff; border: 1px solid var(--border-color); padding: 1rem; border-radius: 8px;">
+                <h5 style="color: #2563eb; margin-bottom: 0.4rem;">1. No Artificial Jumps</h5>
+                <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
+                  We don't round 2.67 to 3.0. If you are 67% ready, your score shows 67%, not 78%. Small improvements in your company are immediately recognized.
+                </p>
+              </div>
+            </div>
+
+            <div class="col-4">
+              <div style="background: #ffffff; border: 1px solid var(--border-color); padding: 1rem; border-radius: 8px;">
+                <h5 style="color: #059669; margin-bottom: 0.4rem;">2. Proof Matters (Receipt Check)</h5>
+                <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
+                  If a company claims "We are strong" using official audited tax filings (10-K), they get 100% credit. If they use a random blog post, we apply a "trust discount."
+                </p>
+              </div>
+            </div>
+
+            <div class="col-4">
+              <div style="background: #ffffff; border: 1px solid var(--border-color); padding: 1rem; border-radius: 8px;">
+                <h5 style="color: #7c3aed; margin-bottom: 0.4rem;">3. Weakest Links Aren't Hidden</h5>
+                <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;">
+                  If a castle has strong 10-foot walls everywhere but leaves the back door unlocked, it isn't safe. The new score highlights hidden weak spots clearly.
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Analysis of 15 Dimensions & Stress Testing -->
+    <div class="grid">
+      <div class="col-6">
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">📐</span> 2. Dimension Redundancies & SaaS Alignment
+          </div>
+          <p style="margin-bottom: 1rem;">While the 15 dimensions cover standard corporate domains, they suffer from overlaps and SaaS misalignments:</p>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Dimension Issue</th>
+                  <th>Current State</th>
+                  <th>Proposed SaaS Realignment</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>CapEx Overweighting</strong></td>
+                  <td>Equal weight to CapEx and OpEx</td>
+                  <td>Merge CapEx into <em>Financial & Cost Flexibility</em> (OpEx represents >80% of SaaS spend).</td>
+                </tr>
+                <tr>
+                  <td><strong>Tech Fragmentation</strong></td>
+                  <td>Split across 4 separate dimensions (Dims 5, 6, 7, 10)</td>
+                  <td>Consolidate into <em>Core SaaS Infrastructure & AI/Cyber Resilience</em>.</td>
+                </tr>
+                <tr>
+                  <td><strong>ESG Parity</strong></td>
+                  <td>Scope 3 energy equal to NRR/Runway</td>
+                  <td>De-prioritize to secondary compliance indicator for mid-market SaaS.</td>
+                </tr>
+                <tr>
+                  <td><strong>Missing SaaS Core</strong></td>
+                  <td>No explicit SaaS Margin & COGS elasticity</td>
+                  <td>Introduce explicit <em>Gross Margin & Inference/Hosting Elasticity</em>.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-6">
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">⚡</span> 3. Why 2&times;2 "AI vs Macro" Stress Testing Fails
+          </div>
+          <p>The current stress testing relies on 4 static scenarios: <em>Autonomous Advantage, Storm & Signal, Managed Modernization, Exposed & Reactive</em>.</p>
+          
+          <div class="summary-box" style="background: #fff1f2; border-left-color: var(--danger); margin-top: 1rem;">
+            <p style="color: #9f1239;"><strong>The Problem:</strong> Under "disruptive macro" conditions, the mock/heuristic engine subtracts -1 point uniformly across 11 out of 15 dimensions. This evaluates macroeconomic sentiment, not operational shock resistance.</p>
+          </div>
+
+          <p style="font-size: 0.95rem; color: var(--text-muted); margin-top: 0.5rem;">
+            Real corporate stress testing (such as bank CCAR or McKinsey Resilience Shocks) does not ask "Will the economy be bad?" It injects <strong>acute, vector-specific shocks</strong> to test structural break-points (e.g., sudden 25% NRR drop or 48-hour active cloud outage).
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Benchmarking vs Stress Testing -->
+    <div class="grid">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">⚖️</span> 4. Benchmarking vs. Stress Testing: Synthesizing the Teammate's Proposal
+          </div>
+          <p>Your teammate suggested anchoring scores against <strong>SaaS Industry Standard Metrics</strong> (e.g., Bessemer / OpenView / McKinsey SaaS benchmarks). Here is how both components fit together:</p>
+
+          <div class="grid" style="margin-top: 1.25rem; margin-bottom: 0;">
+            <div class="col-6">
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1.25rem; border-radius: 8px;">
+                <h4 style="color: #166534; margin-bottom: 0.5rem;">1. SaaS Industry Benchmarks = Baseline Position</h4>
+                <p style="font-size: 0.9rem; color: #14532d;">
+                  Anchors subjective levels (1 to 4) to empirical SaaS KPIs:<br>
+                  • <strong>Level 4:</strong> NRR > 120%, Burn Multiple < 1.0x, CAC Payback < 12 mos.<br>
+                  • <strong>Level 2:</strong> NRR 90-100%, Burn Multiple 2.0-3.0x, CAC Payback > 24 mos.<br>
+                  <em>Tells you where the company stands today relative to peers.</em>
+                </p>
+              </div>
+            </div>
+
+            <div class="col-6">
+              <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 1.25rem; border-radius: 8px;">
+                <h4 style="color: #1e40af; margin-bottom: 0.5rem;">2. Factor-Based Shock Testing = Shock Absorption</h4>
+                <p style="font-size: 0.9rem; color: #1e3a8a;">
+                  Tests how the baseline degrades under 6 specific vulnerability vectors:<br>
+                  • <strong>Shock Vector 1:</strong> 25% NRR Churn Shock<br>
+                  • <strong>Shock Vector 2:</strong> Cloud Outage / Cyber Breach<br>
+                  • <strong>Shock Vector 3:</strong> 40% LLM COGS Inflation<br>
+                  • <strong>Shock Vector 4:</strong> AI Disruption & Seat-Based Pricing Decay<br>
+                  <em>Tells you if the company breaks under acute stress.</em>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="formula-box" style="text-align: center; margin-top: 1.5rem;">
+            <span class="highlight">Final Resilience Rating</span> = f(SaaS Peer Benchmark Position) &minus; g(Shock Sensitivity Elasticity &beta;)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Proposed Target Architecture -->
+    <div class="grid">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">🚀</span> 5. Proposed Target State Architecture
+          </div>
+
+          <p style="margin-bottom: 1rem;">We propose a <strong>Streamlined 11-Dimension SaaS Model</strong> powered by a <strong>Hybrid Min-Weighted Aggregation Engine</strong> and <strong>6 Factor-Based Shock Injection Vectors</strong> (including a dedicated AI Disruption Shock Vector).</p>
+
+          <!-- Hybrid Aggregation Formula -->
+          <div style="background: #f8fafc; border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+            <h4 style="color: var(--primary); margin-bottom: 0.5rem;">Pillar 1: Hybrid Min-Weighted Aggregation Formula</h4>
+            <p style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 0.75rem;">Combines weighted average capability with an explicit bottleneck penalty:</p>
+            
+            <div class="formula-box">
+              M<sub>dimension</sub> = <span class="highlight">&alpha; &middot; min(S<sub>i</sub>)</span> + <span class="highlight">(1 - &alpha;) &middot; &sum; (w<sub>i</sub> &middot; S<sub>i</sub>)</span>
+            </div>
+            
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              Where S<sub>i</sub> &isin; [1.00, 4.00] are continuous sub-scores, w<sub>i</sub> are materiality weights (&sum; w<sub>i</sub> = 1.0), and &alpha; &approx; 0.30 is the bottleneck penalty factor.
+            </p>
+          </div>
+
+          <!-- 6 Targeted Shock Vectors Table -->
+          <h4 style="color: var(--primary); margin-bottom: 0.75rem;">Pillar 2: 6 Factor-Based Shock Injection Vectors</h4>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Shock Vector</th>
+                  <th>Specific Trigger Condition</th>
+                  <th>Primary Vulnerable Dimensions</th>
+                  <th>Sensitivity Driver (&beta;)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>1. Revenue Compression Shock</strong></td>
+                  <td>25% sudden NRR contraction, enterprise budget freeze</td>
+                  <td>Revenue Durability, Sales Pipeline, Liquidity</td>
+                  <td>Customer concentration & contract length</td>
+                </tr>
+                <tr>
+                  <td><strong>2. Cloud Outage & Cyber Breach</strong></td>
+                  <td>Major cloud region outage or zero-day security incident</td>
+                  <td>Operational Continuity, Tech & Cyber, Trust</td>
+                  <td>Multi-region redundancy & security tier</td>
+                </tr>
+                <tr>
+                  <td><strong>3. COGS & Margin Squeeze</strong></td>
+                  <td>40% spike in LLM inference / cloud costs with pricing lock</td>
+                  <td>OpEx Elasticity, Gross Margin, Liquidity</td>
+                  <td>Hosting cost variability & pricing power</td>
+                </tr>
+                <tr>
+                  <td><strong>4. Key Talent Attrition</strong></td>
+                  <td>Sudden voluntary departure of critical engineering leadership</td>
+                  <td>R&D Capacity, Decision Agility, Culture</td>
+                  <td>Key-person dependency & bench depth</td>
+                </tr>
+                <tr>
+                  <td><strong>5. Capital Market Freeze</strong></td>
+                  <td>Venture/debt market lockup; payment terms extend +60 days</td>
+                  <td>Liquidity & Runway, M&A / BD, CapEx</td>
+                  <td>Current cash burn & runway months</td>
+                </tr>
+                <tr style="background: #eff6ff;">
+                  <td><strong>6. AI Disruption & Commodity Shock</strong> <span class="badge badge-info">New Core Vector</span></td>
+                  <td>Autonomous AI agents commoditize legacy workflow; seat-based pricing collapses as clients build internal LLM agents</td>
+                  <td>Innovation & R&D, Revenue Durability, Pricing Power, Ecosystem Strength</td>
+                  <td>Proprietary data moat, outcome-based pricing capability & AI architectural readiness</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 2D Matrix -->
+          <h4 style="color: var(--primary); margin-top: 1.5rem; margin-bottom: 0.75rem;">Pillar 3: 2D Base-vs-Sensitivity Matrix</h4>
+          <div class="matrix-grid">
+            <div class="matrix-cell header-cell">Low Scenario Sensitivity (&Delta; &le; 0.8)</div>
+            <div class="matrix-cell header-cell">High Scenario Sensitivity (&Delta; &gt; 0.8)</div>
+            
+            <div class="matrix-cell" style="border-top: 1px solid var(--border-color);">
+              <h5 style="color: var(--warning);">Basic Capability Gap</h5>
+              <p>Base score is low (&lt; 2.8), but shocks cause little further drop. Fundamental build-up required.</p>
+            </div>
+            <div class="matrix-cell" style="border-top: 1px solid var(--border-color);">
+              <h5 style="color: var(--danger);">Structural Failure Risk (Exposed)</h5>
+              <p>Base score is low (&lt; 2.8) AND acute shocks cause severe further breakdown. Highest priority focus.</p>
+            </div>
+
+            <div class="matrix-cell" style="border-top: 1px solid var(--border-color);">
+              <h5 style="color: var(--success);">Resilient Anchor (Strong)</h5>
+              <p>Base score is high (&ge; 2.8) and capability remains robust under all 6 shock vectors.</p>
+            </div>
+            <div class="matrix-cell" style="border-top: 1px solid var(--border-color);">
+              <h5 style="color: var(--secondary-accent);">Volatile / Conditional Resilience</h5>
+              <p>Base score is currently strong (&ge; 2.8), but specific shocks expose hidden fragility.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Implementation Roadmap -->
+    <div class="grid">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-title">
+            <span class="icon">🛠️</span> 6. Implementation & Refactoring Plan
+          </div>
+          
+          <ul class="solution-list">
+            <li class="solution-item">
+              <h4>Refactor Type Definitions (<code>aurora/src/types/scoring.ts</code>)</h4>
+              <p>Update <code>maturityLevel</code> from discrete integer <code>1|2|3|4</code> to floating-point continuous scale <code>number</code> (1.00 to 4.00) and add <code>materialityWeight</code>, <code>bottleneckPenalty</code>, and <code>confidenceInterval</code>.</p>
+            </li>
+            <li class="solution-item">
+              <h4>Upgrade Scoring Engine (<code>aurora/src/lib/framework/scoring.ts</code>)</h4>
+              <p>Implement <code>calculateHybridDimensionMaturity()</code> with &alpha; = 0.30 bottleneck weighting and continuous sigmoidal 0–100 normalization mapping.</p>
+            </li>
+            <li class="solution-item">
+              <h4>Replace 2&times;2 Scenarios with Vector Shock Engine (<code>aurora/src/lib/framework/scenarios.ts</code>)</h4>
+              <p>Replace generic AI/Macro scenarios with the 6 Factor-Based Shock Injection Vectors (including AI Disruption & Commodity Shock) and shock sensitivity elasticity factors.</p>
+            </li>
+            <li class="solution-item">
+              <h4>Update Documentation (<code>aurora/docs/scoring-engine.md</code> & <code>architecture.md</code>)</h4>
+              <p>Formally update system documentation with the new mathematical model, SaaS benchmark mapping, and shock testing specifications.</p>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>AURORA Resilience Platform — Confidential Architectural Analysis & Executive Report</p>
+      <p>Generated for ISB Resilience Learning Workspace | September 2026</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +59,10 @@ export function DimensionScreeningStage({ assessment, approvals, auditTrail, onR
     try {
       const res = await fetch(`/api/assessments/${assessment.id}/dimensions`, { method: 'POST' });
       const recommended = await res.json();
+      if (!res.ok) {
+        toast.error(recommended.error || 'Dimension recommendation failed');
+        return;
+      }
       if (Array.isArray(recommended)) {
         const updated: Record<string, DimensionSelection> = {};
         for (const r of recommended) {
@@ -66,8 +71,11 @@ export function DimensionScreeningStage({ assessment, approvals, auditTrail, onR
         setSelections(updated);
       }
       await onRefresh();
-    } catch (err) { console.error(err); }
-    finally { setRecommending(false); }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to get recommendations');
+    } finally {
+      setRecommending(false);
+    }
   }
 
   function toggleDeep(key: string) {

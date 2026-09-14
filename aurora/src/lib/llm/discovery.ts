@@ -17,12 +17,16 @@ export interface DiscoveryResult {
 
 export async function discoverCompany(
   companyName: string,
-  assessmentId: string
+  assessmentId: string,
+  useMockData: boolean = false
 ): Promise<DiscoveryResult> {
-  if (isLLMConfigured()) {
-    return discoverCompanyWithLLM(companyName, assessmentId);
+  if (useMockData) {
+    return discoverCompanyMock(companyName, assessmentId);
   }
-  return discoverCompanyMock(companyName, assessmentId);
+  if (!isLLMConfigured()) {
+    throw new Error('LLM API key is not configured (ANTHROPIC_API_KEY is missing). Enable "Use Mock Data" in settings if you wish to run without an LLM key.');
+  }
+  return discoverCompanyWithLLM(companyName, assessmentId);
 }
 
 async function discoverCompanyWithLLM(
@@ -53,62 +57,57 @@ async function discoverCompanyWithLLM(
 }
 Return 3-5 evidence items covering different AURORA dimensions. Only include URLs you are confident are real. Set sourceUrl to null if unsure.`;
 
-  try {
-    const result = await callLLMJSON<{
-      companyName: string;
-      companyDescription: string;
-      industry: string;
-      companySize: 'small' | 'medium' | 'large';
-      evidence: Array<{
-        claim: string;
-        extractedValue: string;
-        supportingExcerpt: string;
-        sourceTitle: string;
-        publisher: string;
-        sourceUrl: string | null;
-        sourceType: EvidenceSourceType;
-        publicationDate: string | null;
-        dimensionKey: string;
-      }>;
-    }>(systemPrompt, userPrompt);
+  const result = await callLLMJSON<{
+    companyName: string;
+    companyDescription: string;
+    industry: string;
+    companySize: 'small' | 'medium' | 'large';
+    evidence: Array<{
+      claim: string;
+      extractedValue: string;
+      supportingExcerpt: string;
+      sourceTitle: string;
+      publisher: string;
+      sourceUrl: string | null;
+      sourceType: EvidenceSourceType;
+      publicationDate: string | null;
+      dimensionKey: string;
+    }>;
+  }>(systemPrompt, userPrompt);
 
-    const now = new Date().toISOString();
-    const profile: CompanyProfile = {
-      companyName: result.companyName || companyName,
-      companyDescription: result.companyDescription || '',
-      industry: result.industry || 'Technology',
-      companySize: result.companySize || 'medium',
-      isMock: false,
-    };
+  const now = new Date().toISOString();
+  const profile: CompanyProfile = {
+    companyName: result.companyName || companyName,
+    companyDescription: result.companyDescription || '',
+    industry: result.industry || 'Technology',
+    companySize: result.companySize || 'medium',
+    isMock: false,
+  };
 
-    const evidence: Evidence[] = (result.evidence || []).map(ev => ({
-      id: uuidv4(),
-      assessmentId,
-      claim: ev.claim,
-      extractedValue: ev.extractedValue || '',
-      supportingExcerpt: ev.supportingExcerpt || '',
-      sourceTitle: ev.sourceTitle || '',
-      publisher: ev.publisher || '',
-      sourceUrl: ev.sourceUrl || null,
-      sourceType: ev.sourceType || 'other',
-      publicationDate: ev.publicationDate || null,
-      retrievalTimestamp: now,
-      pageNumber: null,
-      dimensionKey: ev.dimensionKey || 'revenue_durability',
-      subdivisionKey: null,
-      urlResolved: ev.sourceUrl !== null,
-      status: 'proposed' as const,
-      rejectionReason: null,
-      sourceOrigin: 'llm_research' as const,
-      isMock: false,
-      createdAt: now,
-    }));
+  const evidence: Evidence[] = (result.evidence || []).map(ev => ({
+    id: uuidv4(),
+    assessmentId,
+    claim: ev.claim,
+    extractedValue: ev.extractedValue || '',
+    supportingExcerpt: ev.supportingExcerpt || '',
+    sourceTitle: ev.sourceTitle || '',
+    publisher: ev.publisher || '',
+    sourceUrl: ev.sourceUrl || null,
+    sourceType: ev.sourceType || 'other',
+    publicationDate: ev.publicationDate || null,
+    retrievalTimestamp: now,
+    pageNumber: null,
+    dimensionKey: ev.dimensionKey || 'revenue_durability',
+    subdivisionKey: null,
+    urlResolved: ev.sourceUrl !== null,
+    status: 'proposed' as const,
+    rejectionReason: null,
+    sourceOrigin: 'llm_research' as const,
+    isMock: false,
+    createdAt: now,
+  }));
 
-    return { profile, evidence };
-  } catch (err) {
-    console.error('LLM discovery failed, falling back to mock:', err);
-    return discoverCompanyMock(companyName, assessmentId);
-  }
+  return { profile, evidence };
 }
 
 function discoverCompanyMock(

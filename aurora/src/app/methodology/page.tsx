@@ -61,8 +61,8 @@ export default function ScoringMethodologyPage() {
               { step: '1', title: 'Evidence Gathering', desc: 'Credible public-domain evidence is gathered for each dimension and subdivision from annual reports, SEC filings, investor materials, trust pages, and other primary sources.' },
               { step: '2', title: 'Subdivision Assessment', desc: 'Each dimension selected for deep assessment has exactly 3 structured subdivisions. Each subdivision is scored 1–4 based on accepted evidence. If evidence is insufficient, the subdivision is marked NOT SCORED.' },
               { step: '3', title: 'Dimension Scoring', desc: 'Dimension maturity = average of applicable subdivision maturity scores (rounded to nearest integer). No weights are applied. This is a pure average per the charter.' },
-              { step: '4', title: 'Scenario Stress Test', desc: 'Base maturity is evaluated under 4 future scenarios. Each dimension may strengthen, remain stable, or weaken. Every adjustment requires rationale, evidence, and user approval.' },
-              { step: '5', title: 'Resilience Classification', desc: 'Strong: maturity ≥3 across all scenarios. Conditional: ≥3 in some but drops below in others. Exposed: base <3 or drops significantly under stress.' },
+              { step: '4', title: 'Scenario Stress Test', desc: 'Base maturity is evaluated under 6 Factor-Based Shock Injection Vectors (including AI Disruption & Commodity Shock). Each dimension may strengthen, remain stable, or weaken. Every adjustment requires rationale, evidence, and user approval.' },
+              { step: '5', title: 'Resilience Classification', desc: 'Strong: maturity ≥3 across all 6 shock vectors. Conditional: ≥3 in some but drops below in others. Exposed: base <3 or drops significantly under stress.' },
             ].map(s => (
               <div key={s.step} className="flex gap-3">
                 <div className="w-8 h-8 rounded-full aurora-gradient flex items-center justify-center text-white text-sm font-bold shrink-0">
@@ -77,22 +77,24 @@ export default function ScoringMethodologyPage() {
           </div>
         </section>
 
-        {/* 4 Scenarios */}
+        {/* 6 Shock Injection Vectors */}
         <section>
-          <h2 className="text-xl font-bold mb-3">Four AURORA Scenarios</h2>
+          <h2 className="text-xl font-bold mb-3">Six Factor-Based Shock Injection Vectors</h2>
           <p className="text-sm text-muted-foreground mb-3">
-            Defined using two axes: AI Implementation Depth × Macro-Disruption Intensity.
+            Targeted operational, financial, human capital, and market/AI shock vectors evaluating shock-absorption elasticity.
           </p>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { name: 'Autonomous Advantage', ai: 'High AI', macro: 'Stable', color: 'border-green-200 bg-green-50/50', desc: 'Measurable AI productivity, strong automation, sufficient budgets.' },
-              { name: 'Storm and Signal', ai: 'High AI', macro: 'Disruptive', color: 'border-amber-200 bg-amber-50/50', desc: 'AI is real but regulation, cyber, budgets complicate execution.' },
-              { name: 'Managed Modernization', ai: 'Low AI', macro: 'Stable', color: 'border-blue-200 bg-blue-50/50', desc: 'Incremental AI, disciplined execution, traditional economics.' },
-              { name: 'Exposed and Reactive', ai: 'Low AI', macro: 'Disruptive', color: 'border-red-200 bg-red-50/50', desc: 'Limited AI lift + worsening conditions pressure everything.' },
+              { name: 'Revenue & NRR Compression Shock', category: 'Financial', color: 'border-red-200 bg-red-50/50', desc: '25% sudden NRR contraction & enterprise budget freeze.' },
+              { name: 'Cloud Outage & Zero-Day Cyber Breach', category: 'Operational', color: 'border-amber-200 bg-amber-50/50', desc: 'Major multi-region active cloud failure and zero-day security incident.' },
+              { name: 'COGS & LLM Hosting Inflation Squeeze', category: 'Financial', color: 'border-purple-200 bg-purple-50/50', desc: '40% spike in cloud infrastructure and AI inference costs under locked customer pricing.' },
+              { name: 'Key Technical Leadership Attrition', category: 'Human Capital', color: 'border-orange-200 bg-orange-50/50', desc: 'Sudden voluntary departure of critical engineering, security & AI leadership.' },
+              { name: 'Capital Market & Refinancing Freeze', category: 'Financial', color: 'border-blue-200 bg-blue-50/50', desc: 'Venture/debt market lockup with +60 day extension in customer payment terms.' },
+              { name: 'AI Disruption & Commodity Shock', category: 'Market & AI', color: 'border-indigo-200 bg-indigo-50/50', desc: 'Autonomous AI agents commoditize legacy workflows; seat pricing collapses as clients deploy internal LLM agents.' },
             ].map(s => (
               <div key={s.name} className={`border rounded-lg p-4 ${s.color}`}>
                 <p className="font-medium text-sm">{s.name}</p>
-                <p className="text-[10px] text-muted-foreground">{s.ai} / {s.macro} Macro</p>
+                <p className="text-[10px] text-muted-foreground">{s.category}</p>
                 <p className="text-xs text-muted-foreground mt-1">{s.desc}</p>
               </div>
             ))}

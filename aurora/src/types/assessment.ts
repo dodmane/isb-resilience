@@ -38,6 +38,7 @@ export interface Assessment {
   industry: string;
   companySize: CompanySize | null;
   dataSourceMode: DataSourceMode;
+  useMockData?: boolean;
   currentStage: AssessmentStage;
   assessmentLens: string;
   scenarioNarratives: Record<string, string>;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -56,10 +57,15 @@ export function SubdivisionScoringStage({
   async function generateScores() {
     setGenerating(true);
     try {
-      await fetch(`/api/assessments/${assessment.id}/subdivision-scores`, { method: 'POST' });
+      const res = await fetch(`/api/assessments/${assessment.id}/subdivision-scores`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to generate scores');
+        return;
+      }
       await onRefresh();
-    } catch (err) {
-      console.error('Failed to generate scores:', err);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate scores');
     } finally {
       setGenerating(false);
     }

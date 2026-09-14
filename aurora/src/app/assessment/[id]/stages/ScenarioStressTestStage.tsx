@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,17 +27,21 @@ import {
 } from 'lucide-react';
 
 const SCENARIO_ICONS: Record<string, React.ReactNode> = {
-  autonomous_advantage: <Zap className="h-4 w-4 text-green-600" />,
-  storm_and_signal: <CloudLightning className="h-4 w-4 text-amber-600" />,
-  managed_modernization: <Settings className="h-4 w-4 text-blue-600" />,
-  exposed_and_reactive: <AlertTriangle className="h-4 w-4 text-red-600" />,
+  revenue_compression: <TrendingDown className="h-4 w-4 text-red-600" />,
+  cloud_cyber_outage: <CloudLightning className="h-4 w-4 text-amber-600" />,
+  cogs_margin_squeeze: <Zap className="h-4 w-4 text-purple-600" />,
+  talent_attrition: <AlertTriangle className="h-4 w-4 text-orange-600" />,
+  capital_market_freeze: <Settings className="h-4 w-4 text-blue-600" />,
+  ai_disruption_commodity: <Zap className="h-4 w-4 text-indigo-600" />,
 };
 
 const SCENARIO_COLORS: Record<string, string> = {
-  autonomous_advantage: 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30',
-  storm_and_signal: 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30',
-  managed_modernization: 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30',
-  exposed_and_reactive: 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30',
+  revenue_compression: 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30',
+  cloud_cyber_outage: 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30',
+  cogs_margin_squeeze: 'border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/30',
+  talent_attrition: 'border-orange-200 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/30',
+  capital_market_freeze: 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30',
+  ai_disruption_commodity: 'border-indigo-200 bg-indigo-50/50 dark:border-indigo-800 dark:bg-indigo-950/30',
 };
 
 const DIRECTION_ICON = {
@@ -65,7 +70,7 @@ export function ScenarioStressTestStage({
   assessment, approvals, dimensionScores, scenarioAssessments, evidence, auditTrail, onRefresh,
 }: Props) {
   const [generating, setGenerating] = useState(false);
-  const [activeScenario, setActiveScenario] = useState<ScenarioKey>('autonomous_advantage');
+  const [activeScenario, setActiveScenario] = useState<ScenarioKey>('revenue_compression');
   const [overrideTarget, setOverrideTarget] = useState<{ scenario: ScenarioKey; dim: string } | null>(null);
   const [overrideLevel, setOverrideLevel] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
@@ -105,10 +110,15 @@ export function ScenarioStressTestStage({
   async function generateAssessments() {
     setGenerating(true);
     try {
-      await fetch(`/api/assessments/${assessment.id}/scenario-assessments`, { method: 'POST' });
+      const res = await fetch(`/api/assessments/${assessment.id}/scenario-assessments`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to generate scenario assessments');
+        return;
+      }
       await onRefresh();
-    } catch (err) {
-      console.error('Failed to generate scenario assessments:', err);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate scenario assessments');
     } finally {
       setGenerating(false);
     }
@@ -280,9 +290,9 @@ export function ScenarioStressTestStage({
                     <CardDescription>{scenario.description}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex gap-4 text-xs">
-                      <span>AI: <strong>{scenario.aiDepth === 'high' ? 'High' : 'Low'}</strong></span>
-                      <span>Macro: <strong>{scenario.macroDisruption === 'stable' ? 'Stable' : 'Disruptive'}</strong></span>
+                    <div className="flex flex-wrap gap-4 text-xs">
+                      <span>Category: <strong>{scenario.category}</strong></span>
+                      <span>Trigger: <strong>{scenario.triggerCondition}</strong></span>
                       {scenarioStats[scenario.key] && (
                         <>
                           <span className="text-green-700">↑ {scenarioStats[scenario.key].strengthens}</span>

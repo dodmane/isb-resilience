@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -12,20 +13,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SCENARIOS } from '@/lib/framework/scenarios';
 import { type Assessment, type StageApproval } from '@/types/assessment';
 import { type AuditEntry } from '@/types/audit';
-import { FlaskConical, Zap, CloudLightning, Settings, AlertTriangle } from 'lucide-react';
+import { FlaskConical, Zap, CloudLightning, Settings, AlertTriangle, TrendingDown } from 'lucide-react';
 
 const SCENARIO_ICONS: Record<string, React.ReactNode> = {
-  autonomous_advantage: <Zap className="h-5 w-5 text-green-600" />,
-  storm_and_signal: <CloudLightning className="h-5 w-5 text-amber-600" />,
-  managed_modernization: <Settings className="h-5 w-5 text-blue-600" />,
-  exposed_and_reactive: <AlertTriangle className="h-5 w-5 text-red-600" />,
+  revenue_compression: <TrendingDown className="h-5 w-5 text-red-600" />,
+  cloud_cyber_outage: <CloudLightning className="h-5 w-5 text-amber-600" />,
+  cogs_margin_squeeze: <Zap className="h-5 w-5 text-purple-600" />,
+  talent_attrition: <AlertTriangle className="h-5 w-5 text-orange-600" />,
+  capital_market_freeze: <Settings className="h-5 w-5 text-blue-600" />,
+  ai_disruption_commodity: <Zap className="h-5 w-5 text-indigo-600" />,
 };
 
-const AXIS_LABELS: Record<string, string> = {
-  autonomous_advantage: 'High AI / Stable Macro',
-  storm_and_signal: 'High AI / High Macro Disruption',
-  managed_modernization: 'Low AI / Stable Macro',
-  exposed_and_reactive: 'Low AI / High Macro Disruption',
+const CATEGORY_LABELS: Record<string, string> = {
+  revenue_compression: 'Financial Shock',
+  cloud_cyber_outage: 'Operational Shock',
+  cogs_margin_squeeze: 'Financial Shock',
+  talent_attrition: 'Human Capital Shock',
+  capital_market_freeze: 'Financial Shock',
+  ai_disruption_commodity: 'Market & AI Shock',
 };
 
 interface Props {
@@ -40,7 +45,7 @@ export function ScenarioContextStage({ assessment, approvals, auditTrail, onRefr
     assessment.scenarioNarratives || {}
   );
   const [generating, setGenerating] = useState(false);
-  const hasNarratives = Object.keys(narratives).length === 4;
+  const hasNarratives = Object.keys(narratives).length === SCENARIOS.length;
 
   const stage2Approval = approvals.find(a => a.stage === 2);
   const isApproved = stage2Approval?.status === 'approved';
@@ -50,10 +55,14 @@ export function ScenarioContextStage({ assessment, approvals, auditTrail, onRefr
     try {
       const res = await fetch(`/api/assessments/${assessment.id}/scenarios`, { method: 'POST' });
       const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to generate scenario narratives');
+        return;
+      }
       setNarratives(data.narratives);
       await onRefresh();
-    } catch (err) {
-      console.error('Failed to generate scenarios:', err);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate scenarios');
     } finally {
       setGenerating(false);
     }
@@ -91,47 +100,34 @@ export function ScenarioContextStage({ assessment, approvals, auditTrail, onRefr
       <div>
         <h2 className="text-2xl font-bold">Scenario Context</h2>
         <p className="text-muted-foreground">
-          Four plausible futures contextualized for {assessment.companyName}.
+          Six factor-based shock injection vectors contextualized for {assessment.companyName}.
         </p>
       </div>
 
-      {/* 2x2 scenario matrix */}
+      {/* Factor-Based Shock Injection Matrix */}
       <Card>
         <CardHeader>
-          <CardTitle>AURORA Scenario Matrix</CardTitle>
+          <CardTitle>AURORA Factor-Based Stress Testing Matrix</CardTitle>
           <CardDescription>
-            AI Implementation Depth × Macro-Disruption Intensity
+            Targeted Shock Vectors & Vulnerability Elasticities
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-0 text-sm">
-            <div />
-            <div className="text-center font-medium py-2 border-b">Low / Stable Macro</div>
-            <div className="text-center font-medium py-2 border-b">High / Disruptive Macro</div>
-
-            <div className="font-medium py-4 pr-4 border-r text-right">High AI</div>
-            <div className="p-3 border-r border-b bg-green-50 dark:bg-green-950/30">
-              <div className="flex items-center gap-1.5 font-medium text-green-700 dark:text-green-400">
-                {SCENARIO_ICONS.autonomous_advantage} Autonomous Advantage
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+            {SCENARIOS.map(s => (
+              <div key={s.key} className="p-3 border rounded-lg space-y-1 bg-card">
+                <div className="flex items-center gap-2 font-medium">
+                  {SCENARIO_ICONS[s.key]}
+                  <span>{s.name}</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">Trigger: </span>{s.triggerCondition}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">Driver: </span>{s.sensitivityDriver}
+                </div>
               </div>
-            </div>
-            <div className="p-3 border-b bg-amber-50 dark:bg-amber-950/30">
-              <div className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400">
-                {SCENARIO_ICONS.storm_and_signal} Storm and Signal
-              </div>
-            </div>
-
-            <div className="font-medium py-4 pr-4 border-r text-right">Low AI</div>
-            <div className="p-3 border-r bg-blue-50 dark:bg-blue-950/30">
-              <div className="flex items-center gap-1.5 font-medium text-blue-700 dark:text-blue-400">
-                {SCENARIO_ICONS.managed_modernization} Managed Modernization
-              </div>
-            </div>
-            <div className="p-3 bg-red-50 dark:bg-red-950/30">
-              <div className="flex items-center gap-1.5 font-medium text-red-700 dark:text-red-400">
-                {SCENARIO_ICONS.exposed_and_reactive} Exposed and Reactive
-              </div>
-            </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -161,7 +157,7 @@ export function ScenarioContextStage({ assessment, approvals, auditTrail, onRefr
                     {SCENARIO_ICONS[scenario.key]}
                     {scenario.name}
                     <Badge variant="outline" className="text-xs ml-auto">
-                      {AXIS_LABELS[scenario.key]}
+                      {CATEGORY_LABELS[scenario.key] || scenario.category}
                     </Badge>
                   </CardTitle>
                   <CardDescription>{scenario.description}</CardDescription>
@@ -170,7 +166,7 @@ export function ScenarioContextStage({ assessment, approvals, auditTrail, onRefr
                   <Textarea
                     value={narratives[scenario.key] || ''}
                     onChange={e => setNarratives(prev => ({ ...prev, [scenario.key]: e.target.value }))}
-                    rows={6}
+                    rows={4}
                     className="text-sm"
                   />
                 </CardContent>

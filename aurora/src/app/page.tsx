@@ -15,6 +15,7 @@ export default function HomePage() {
   const [showNew, setShowNew] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [dataSourceMode, setDataSourceMode] = useState<DataSourceMode>('public');
+  const [useMockData, setUseMockData] = useState(false);
   const [creating, setCreating] = useState(false);
 
   function loadAssessments() {
@@ -42,7 +43,7 @@ export default function HomePage() {
       const res = await fetch('/api/assessments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName, dataSourceMode }),
+        body: JSON.stringify({ companyName, dataSourceMode, useMockData }),
       });
       const assessment = await res.json();
       router.push(`/assessment/${assessment.id}`);
@@ -113,7 +114,24 @@ export default function HomePage() {
                   ))}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="pt-2 border-t flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="useMockData"
+                    checked={useMockData}
+                    onChange={(e) => setUseMockData(e.target.checked)}
+                    className="h-4 w-4 rounded border-input cursor-pointer"
+                  />
+                  <Label htmlFor="useMockData" className="cursor-pointer text-sm font-medium">
+                    Use Mock Data (Offline / Test Mode)
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">
+                  Disabled by default. When disabled, AURORA uses live LLM analysis and throws an error if LLM/API key is unavailable.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-2">
                 <Button onClick={createAssessment} disabled={creating || !companyName.trim()}>
                   {creating ? 'Creating...' : 'Start Assessment'}
                 </Button>
@@ -133,7 +151,7 @@ export default function HomePage() {
             <h2 className="text-xl font-semibold mb-2">No assessments yet</h2>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               Create a new assessment to begin evaluating business resilience
-              across 15 AURORA dimensions and 4 future scenarios.
+              across 15 AURORA dimensions and 6 factor-based shock vectors.
             </p>
             <Button onClick={() => setShowNew(true)} size="lg">
               <Plus className="h-4 w-4 mr-2" />

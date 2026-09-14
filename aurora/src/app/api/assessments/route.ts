@@ -10,9 +10,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { companyName, dataSourceMode } = body as {
+  const { companyName, dataSourceMode, useMockData } = body as {
     companyName: string;
     dataSourceMode: DataSourceMode;
+    useMockData?: boolean;
   };
 
   if (!companyName?.trim()) {
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
     industry: '',
     companySize: null,
     dataSourceMode: dataSourceMode || 'public',
+    useMockData: Boolean(useMockData || false),
     currentStage: 1,
     assessmentLens: 'SaaS/IT',
     scenarioNarratives: {},

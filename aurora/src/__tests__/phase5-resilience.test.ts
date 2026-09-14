@@ -61,10 +61,12 @@ describe('Resilience Classification', () => {
   it('should classify as conditional when some scenarios drop below 3', () => {
     const ds = makeDimScore({ maturityLevel: 3 });
     const sas = [
-      makeSA({ scenarioKey: 'autonomous_advantage', scenarioMaturity: 3 }),
-      makeSA({ scenarioKey: 'storm_and_signal', scenarioMaturity: 2 }),
-      makeSA({ scenarioKey: 'managed_modernization', scenarioMaturity: 3 }),
-      makeSA({ scenarioKey: 'exposed_and_reactive', scenarioMaturity: 3 }),
+      makeSA({ scenarioKey: 'revenue_compression', scenarioMaturity: 2 }),
+      makeSA({ scenarioKey: 'cloud_cyber_outage', scenarioMaturity: 3 }),
+      makeSA({ scenarioKey: 'cogs_margin_squeeze', scenarioMaturity: 3 }),
+      makeSA({ scenarioKey: 'talent_attrition', scenarioMaturity: 3 }),
+      makeSA({ scenarioKey: 'capital_market_freeze', scenarioMaturity: 3 }),
+      makeSA({ scenarioKey: 'ai_disruption_commodity', scenarioMaturity: 3 }),
     ];
     expect(classifyDimension(ds, sas)).toBe('conditional');
   });
@@ -78,7 +80,7 @@ describe('Resilience Classification', () => {
 describe('Resilience Gaps', () => {
   it('should generate gaps for weakening dimensions', () => {
     const dimScores = [makeDimScore({ maturityLevel: 3 })];
-    const sas = [makeSA({ scenarioKey: 'exposed_and_reactive', direction: 'weakens', scenarioMaturity: 2 })];
+    const sas = [makeSA({ scenarioKey: 'revenue_compression', direction: 'weakens', scenarioMaturity: 2 })];
     const evidence = [makeEvidence()];
     const gaps = generateResilienceGaps('a-1', dimScores, sas, evidence);
     expect(gaps.length).toBeGreaterThan(0);
@@ -90,7 +92,7 @@ describe('Resilience Gaps', () => {
 
   it('should generate gap for base maturity < 3 even without weakening scenario', () => {
     const dimScores = [makeDimScore({ maturityLevel: 2 })];
-    const sas = [makeSA({ scenarioKey: 'managed_modernization', direction: 'stable', scenarioMaturity: 2 })];
+    const sas = [makeSA({ scenarioKey: 'capital_market_freeze', direction: 'stable', scenarioMaturity: 2 })];
     const gaps = generateResilienceGaps('a-1', dimScores, sas, []);
     expect(gaps.some(g => g.scenarioKey === 'base')).toBe(true);
   });

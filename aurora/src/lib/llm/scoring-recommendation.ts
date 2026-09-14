@@ -15,7 +15,8 @@ export interface ScoringRecommendation {
 export async function recommendSubdivisionScoreAsync(
   dimensionKey: string,
   subdivisionKey: string,
-  evidence: Evidence[]
+  evidence: Evidence[],
+  useMockData: boolean = false
 ): Promise<ScoringRecommendation> {
   const accepted = evidence.filter(e => e.status === 'accepted');
   if (accepted.length === 0) {
@@ -26,21 +27,27 @@ export async function recommendSubdivisionScoreAsync(
     };
   }
 
-  if (isLLMConfigured()) {
-    try {
-      const dim = DIMENSIONS.find(d => d.key === dimensionKey);
-      const sub = SUBDIVISIONS[dimensionKey as DimensionKey]?.find(s => s.key === subdivisionKey);
+  if (useMockData) {
+    return recommendSubdivisionScore(dimensionKey, subdivisionKey, evidence);
+  }
 
-      const systemPrompt = `You are an AURORA resilience assessment analyst. Score subdivisions on a 1-4 maturity scale:
+  if (!isLLMConfigured()) {
+    throw new Error('LLM API key is not configured (ANTHROPIC_API_KEY is missing). Enable "Use Mock Data" in settings if you wish to run without an LLM key.');
+  }
+
+  const dim = DIMENSIONS.find(d => d.key === dimensionKey);
+  const sub = SUBDIVISIONS[dimensionKey as DimensionKey]?.find(s => s.key === subdivisionKey);
+
+  const systemPrompt = `You are an AURORA resilience assessment analyst. Score subdivisions on a 1-4 maturity scale:
 1 = Basic / Not Met
 2 = Developing / Partially Met
 3 = Established / Mostly Met
 4 = Advanced / Fully Met
 Base your score ONLY on the provided evidence. If evidence is insufficient, return null.`;
 
-      const evidenceSummary = accepted.map(e => `- ${e.claim} (Source: ${e.sourceTitle}, ${e.publisher})`).join('\n');
+  const evidenceSummary = accepted.map(e => `- ${e.claim} (Source: ${e.sourceTitle}, ${e.publisher})`).join('\n');
 
-      const userPrompt = `Dimension: ${dim?.name || dimensionKey}
+  const userPrompt = `Dimension: ${dim?.name || dimensionKey}
 Subdivision: ${sub?.name || subdivisionKey} — ${sub?.description || ''}
 
 Evidence:
@@ -53,19 +60,13 @@ Return JSON:
   "rationale": "2-3 sentence explanation of the score based on the evidence"
 }`;
 
-      const result = await callLLMJSON<{ maturityLevel: number | null; confidence: Confidence; rationale: string }>(systemPrompt, userPrompt);
-      return {
-        maturityLevel: result.maturityLevel as MaturityLevel | null,
-        confidence: result.confidence || 'medium',
-        rationale: result.rationale || '',
-        status: result.maturityLevel ? 'scored' : 'insufficient_evidence',
-      };
-    } catch (err) {
-      console.error('LLM scoring failed, using mock:', err);
-    }
-  }
-
-  return recommendSubdivisionScore(dimensionKey, subdivisionKey, evidence);
+  const result = await callLLMJSON<{ maturityLevel: number | null; confidence: Confidence; rationale: string }>(systemPrompt, userPrompt);
+  return {
+    maturityLevel: result.maturityLevel as MaturityLevel | null,
+    confidence: result.confidence || 'medium',
+    rationale: result.rationale || '',
+    status: result.maturityLevel ? 'scored' : 'insufficient_evidence',
+  };
 }
 
 // Mock scoring — used as fallback

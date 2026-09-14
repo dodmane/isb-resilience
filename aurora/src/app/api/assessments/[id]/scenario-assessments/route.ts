@@ -28,74 +28,79 @@ export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const assessment = getAssessment(id);
-  if (!assessment) {
-    return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
-  }
-
-  const dimScores = getDimensionScores(id);
-  const evidence = getEvidenceForAssessment(id);
-  const existing = getScenarioAssessments(id);
-  const now = new Date().toISOString();
-  const results: ScenarioAssessment[] = [];
-
-  for (const scenario of SCENARIOS) {
-    for (const dimScore of dimScores) {
-      // Skip if already user-approved
-      const alreadyApproved = existing.find(
-        e => e.scenarioKey === scenario.key && e.dimensionKey === dimScore.dimensionKey && e.userApproved
-      );
-      if (alreadyApproved) continue;
-
-      const dimEvidence = evidence.filter(
-        e => e.dimensionKey === dimScore.dimensionKey && e.status === 'accepted'
-      );
-
-      const reasoning = await generateScenarioReasoningAsync(
-        scenario.key,
-        dimScore.dimensionKey,
-        dimScore,
-        dimEvidence
-      );
-
-      const sa: ScenarioAssessment = {
-        id: uuidv4(),
-        assessmentId: id,
-        scenarioKey: scenario.key,
-        dimensionKey: dimScore.dimensionKey,
-        baseMaturity: dimScore.maturityLevel,
-        scenarioMaturity: reasoning.scenarioMaturity,
-        direction: reasoning.direction,
-        rationale: reasoning.rationale,
-        confidence: reasoning.confidence,
-        relevantEvidenceIds: dimEvidence.map(e => e.id),
-        userApproved: false,
-        overrideReason: null,
-        isMockRecommendation: reasoning.isMock,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      upsertScenarioAssessment(sa);
-      results.push(sa);
+  try {
+    const { id } = await params;
+    const assessment = getAssessment(id);
+    if (!assessment) {
+      return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
     }
+
+    const dimScores = getDimensionScores(id);
+    const evidence = getEvidenceForAssessment(id);
+    const existing = getScenarioAssessments(id);
+    const now = new Date().toISOString();
+    const results: ScenarioAssessment[] = [];
+
+    for (const scenario of SCENARIOS) {
+      for (const dimScore of dimScores) {
+        // Skip if already user-approved
+        const alreadyApproved = existing.find(
+          e => e.scenarioKey === scenario.key && e.dimensionKey === dimScore.dimensionKey && e.userApproved
+        );
+        if (alreadyApproved) continue;
+
+        const dimEvidence = evidence.filter(
+          e => e.dimensionKey === dimScore.dimensionKey && e.status === 'accepted'
+        );
+
+        const reasoning = await generateScenarioReasoningAsync(
+          scenario.key,
+          dimScore.dimensionKey,
+          dimScore,
+          dimEvidence,
+          Boolean(assessment.useMockData)
+        );
+
+        const sa: ScenarioAssessment = {
+          id: uuidv4(),
+          assessmentId: id,
+          scenarioKey: scenario.key,
+          dimensionKey: dimScore.dimensionKey,
+          baseMaturity: dimScore.maturityLevel,
+          scenarioMaturity: reasoning.scenarioMaturity,
+          direction: reasoning.direction,
+          rationale: reasoning.rationale,
+          confidence: reasoning.confidence,
+          relevantEvidenceIds: dimEvidence.map(e => e.id),
+          userApproved: false,
+          overrideReason: null,
+          isMockRecommendation: reasoning.isMock,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        upsertScenarioAssessment(sa);
+        results.push(sa);
+      }
+    }
+
+    addAuditEntry({
+      id: uuidv4(),
+      assessmentId: id,
+      action: 'scenario_assessments_generated',
+      entityType: 'assessment',
+      entityId: id,
+      oldValue: null,
+      newValue: { generatedCount: results.length, scenarios: SCENARIOS.map(s => s.key) },
+      reason: assessment.useMockData ? 'Scenario stress-test assessments generated via Mock Data' : 'Scenario stress-test assessments generated via LLM',
+      actor: 'system',
+      timestamp: now,
+    });
+
+    return NextResponse.json(results);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Scenario stress testing failed' }, { status: 500 });
   }
-
-  addAuditEntry({
-    id: uuidv4(),
-    assessmentId: id,
-    action: 'scenario_assessments_generated',
-    entityType: 'assessment',
-    entityId: id,
-    oldValue: null,
-    newValue: { generatedCount: results.length, scenarios: SCENARIOS.map(s => s.key) },
-    reason: 'Scenario stress-test assessments generated via mock AI',
-    actor: 'system',
-    timestamp: now,
-  });
-
-  return NextResponse.json(results);
 }
 
 // Update a single scenario assessment (override or approve)

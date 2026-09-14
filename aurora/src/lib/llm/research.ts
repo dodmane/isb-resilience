@@ -14,16 +14,16 @@ export async function researchEvidence(
   assessmentId: string,
   companyName: string,
   plan: EvidencePlanItem[],
-  existingEvidence: Evidence[]
+  existingEvidence: Evidence[],
+  useMockData: boolean = false
 ): Promise<ResearchResult> {
-  if (isLLMConfigured()) {
-    try {
-      return await researchWithLLM(assessmentId, companyName, plan, existingEvidence);
-    } catch (err) {
-      console.error('LLM research failed, falling back to mock:', err);
-    }
+  if (useMockData) {
+    return researchMock(assessmentId, companyName, plan, existingEvidence);
   }
-  return researchMock(assessmentId, companyName, plan, existingEvidence);
+  if (!isLLMConfigured()) {
+    throw new Error('LLM API key is not configured (ANTHROPIC_API_KEY is missing). Enable "Use Mock Data" in settings if you wish to run without an LLM key.');
+  }
+  return researchWithLLM(assessmentId, companyName, plan, existingEvidence);
 }
 
 async function researchWithLLM(

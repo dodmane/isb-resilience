@@ -7,16 +7,16 @@ export async function recommendDimensionSelections(
   companyName: string,
   industry: string,
   companySize: string,
-  companyDescription: string
+  companyDescription: string,
+  useMockData: boolean = false
 ): Promise<DimensionSelection[]> {
-  if (isLLMConfigured()) {
-    try {
-      return await recommendWithLLM(companyName, industry, companySize, companyDescription);
-    } catch (err) {
-      console.error('LLM dimension recommendation failed, using defaults:', err);
-    }
+  if (useMockData) {
+    return getDefaultSelections();
   }
-  return getDefaultSelections();
+  if (!isLLMConfigured()) {
+    throw new Error('LLM API key is not configured (ANTHROPIC_API_KEY is missing). Enable "Use Mock Data" in settings if you wish to run without an LLM key.');
+  }
+  return recommendWithLLM(companyName, industry, companySize, companyDescription);
 }
 
 async function recommendWithLLM(

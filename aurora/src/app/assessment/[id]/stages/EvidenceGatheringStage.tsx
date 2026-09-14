@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,10 +93,15 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
   async function runResearch() {
     setResearching(true);
     try {
-      await fetch(`/api/assessments/${assessment.id}/research`, { method: 'POST' });
+      const res = await fetch(`/api/assessments/${assessment.id}/research`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Research failed');
+        return;
+      }
       await onRefresh();
-    } catch (err) {
-      console.error('Research failed:', err);
+    } catch (err: any) {
+      toast.error(err.message || 'Research failed');
     } finally {
       setResearching(false);
     }

@@ -8,7 +8,7 @@ export function isLLMConfigured(): boolean {
 
 export async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
   if (!ANTHROPIC_API_KEY) {
-    throw new Error('LLM not configured — set ANTHROPIC_API_KEY');
+    throw new Error('LLM API key is not configured (ANTHROPIC_API_KEY is missing). Enable "Use Mock Data" in settings if you wish to run without an LLM key.');
   }
 
   const response = await fetch(`${ANTHROPIC_BASE_URL}/v1/messages`, {
@@ -27,13 +27,16 @@ export async function callLLM(systemPrompt: string, userPrompt: string): Promise
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    console.error('LLM API error:', response.status, err);
-    throw new Error(`LLM API error: ${response.status}`);
+    const errText = await response.text();
+    console.error('LLM API error:', response.status, errText);
+    throw new Error(`LLM API error (${response.status}): ${errText || response.statusText}`);
   }
 
   const data = await response.json();
   const content = data.content?.[0]?.text || '';
+  if (!content) {
+    throw new Error('LLM API returned an empty response.');
+  }
   return content;
 }
 
