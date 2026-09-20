@@ -57,7 +57,20 @@ run:
 ./run.sh
 ```
 
-On Windows, run this instead:
+On Windows, run one of these instead:
+
+```powershell
+# easiest option
+.\run.cmd
+```
+
+or:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1
+```
+
+If you prefer to do it manually, use:
 
 ```powershell
 docker compose up --build -d
@@ -94,6 +107,18 @@ Make sure Docker Desktop is running, then check the application logs:
 
 ```bash
 docker compose logs -f aurora-app
+```
+
+If PowerShell refuses to run npm scripts, use the Windows launcher instead:
+
+```powershell
+.\run.cmd
+```
+
+or:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
 ### The port is already in use
