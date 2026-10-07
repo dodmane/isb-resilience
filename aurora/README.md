@@ -48,6 +48,13 @@ private. Never post the key in GitHub, email, screenshots, or chat.
 The application can start without an API key, but its AI-assisted research and
 recommendation features will not work.
 
+### Sign in
+
+The local demo accepts any valid email address with password `isb666`. For a
+deployment, set `AURORA_LOGIN_PASSWORD` to your chosen password and
+`AURORA_SESSION_SECRET` to a long, random value in `.env.local`. The built-in
+session-secret fallback is intended only for local demonstration use.
+
 ### 4. Start AURORA
 
 With Docker Desktop running and the terminal opened in the `aurora` folder,

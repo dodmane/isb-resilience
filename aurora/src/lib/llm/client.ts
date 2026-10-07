@@ -1,29 +1,30 @@
-const ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
+import { getLLMRuntimeSettings, LLM_PROVIDER } from './settings';
 
 export function isLLMConfigured(): boolean {
-  return !!ANTHROPIC_API_KEY;
+  return Boolean(getLLMRuntimeSettings().apiKey);
 }
 
 export function getScoringModel(): string {
-  return CLAUDE_MODEL;
+  return getLLMRuntimeSettings().model;
 }
 
 export async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('LLM not configured — set ANTHROPIC_API_KEY');
+  const settings = getLLMRuntimeSettings();
+  if (!settings.apiKey) {
+    throw new Error('LLM not configured — enter an API key in LLM settings or set ANTHROPIC_API_KEY');
   }
+  if (settings.provider !== LLM_PROVIDER) throw new Error(`Unsupported LLM provider: ${settings.provider}`);
 
-  const response = await fetch(`${ANTHROPIC_BASE_URL}/v1/messages`, {
+  const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
+  const response = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
+      'x-api-key': settings.apiKey,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: CLAUDE_MODEL,
+      model: settings.model,
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],

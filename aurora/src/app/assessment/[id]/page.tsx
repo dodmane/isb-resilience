@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { WorkflowStepper } from '@/components/workflow/WorkflowStepper';
+import { LogoutButton } from '@/components/auth/LogoutButton';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight, RotateCcw } from 'lucide-react';
 import { getPreviousStage, getNextStage } from '@/lib/workflow/stages';
@@ -107,6 +108,7 @@ export default function AssessmentPage() {
           <span className="text-white/40">|</span>
           <span className="font-medium text-white/90">{assessment.companyName}</span>
           <span className="ml-auto text-xs text-white/50">{assessment.assessmentLens}</span>
+          <LogoutButton />
         </div>
       </header>
       <div className="border-b bg-background">
