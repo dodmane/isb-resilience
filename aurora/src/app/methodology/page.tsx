@@ -31,10 +31,10 @@ export default function ScoringMethodologyPage() {
           <h2 className="text-xl font-bold mb-3">Maturity Scale (1–4)</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {[
-              { level: 1, label: 'Basic / Not Met', range: '25–40', color: 'border-red-200 bg-red-50', desc: 'Capability is absent, ad-hoc, or reactive. No structured approach.' },
-              { level: 2, label: 'Developing / Partially Met', range: '50–65', color: 'border-amber-200 bg-amber-50', desc: 'Capability exists but is inconsistent, incomplete, or untested.' },
-              { level: 3, label: 'Established / Mostly Met', range: '70–85', color: 'border-blue-200 bg-blue-50', desc: 'Capability is structured, documented, and operational with minor gaps.' },
-              { level: 4, label: 'Advanced / Fully Met', range: '90–100', color: 'border-green-200 bg-green-50', desc: 'Capability is mature, tested, adaptive, and demonstrably resilient.' },
+              { level: 1, label: 'Basic / Not Met', range: '0–25', color: 'border-red-200 bg-red-50', desc: 'Minimal capability; criteria absent or weak; high vulnerability.' },
+              { level: 2, label: 'Developing / Partially Met', range: '26–50', color: 'border-amber-200 bg-amber-50', desc: 'Some criteria satisfied; capability is inconsistent or incomplete.' },
+              { level: 3, label: 'Established / Mostly Met', range: '51–75', color: 'border-blue-200 bg-blue-50', desc: 'Most criteria satisfied; reliable, repeatable processes; moderate resilience.' },
+              { level: 4, label: 'Advanced / Fully Met', range: '76–100', color: 'border-green-200 bg-green-50', desc: 'All criteria satisfied; automated, predictive or fully integrated; high resilience.' },
             ].map(m => (
               <div key={m.level} className={`border rounded-lg p-4 ${m.color}`}>
                 <div className="flex items-center gap-2 mb-1">
@@ -46,10 +46,42 @@ export default function ScoringMethodologyPage() {
               </div>
             ))}
           </div>
-          <div className="mt-3 p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground">
-            <strong>Note:</strong> The 0–100 normalized value is an interpretive representation of the
-            1–4 maturity level. It does not imply mathematical precision. The maturity level is the
-            primary assessment result.
+          <div className="mt-3 p-4 bg-muted/50 rounded-lg space-y-3">
+            <div className="text-xs text-muted-foreground">
+              <strong>How the numeric score is formed:</strong> start with the selected Level&apos;s band minimum, then add the Position points: Low +3, Mid +12, or High +21. This produces the sub-dimension score; ordinary scores range from 3 to 97.
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="border-b">
+                    <th className="py-1.5 pr-3">Level</th>
+                    <th className="py-1.5 px-3">Band minimum</th>
+                    <th className="py-1.5 px-3 text-center">Low</th>
+                    <th className="py-1.5 px-3 text-center">Mid</th>
+                    <th className="py-1.5 pl-3 text-center">High</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { level: 1, minimum: 0, low: 3, mid: 12, high: 21 },
+                    { level: 2, minimum: 26, low: 29, mid: 38, high: 47 },
+                    { level: 3, minimum: 51, low: 54, mid: 63, high: 72 },
+                    { level: 4, minimum: 76, low: 79, mid: 88, high: 97 },
+                  ].map(row => (
+                    <tr key={row.level} className="border-b last:border-0">
+                      <th scope="row" className="py-1.5 pr-3 font-medium">Level {row.level}</th>
+                      <td className="py-1.5 px-3">{row.minimum}</td>
+                      <td className="py-1.5 px-3 text-center">{row.low}</td>
+                      <td className="py-1.5 px-3 text-center">{row.mid}</td>
+                      <td className="py-1.5 pl-3 text-center">{row.high}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              <strong>Example:</strong> Level 3 + Mid = 51 + 12 = 63. Dimension scores are the equal-weight average of rated sub-dimensions (at least 2 of 3); the composite is the equal-weight average of qualifying dimensions. Missing ratings are excluded, not treated as zero. The averages are not rounded before the maturity band is looked up. These are rubric scores, not percentages or probabilities. AI may suggest Level and Position from accepted evidence; a reviewer confirms or edits the suggestion. Manual entry is also available.
+            </p>
           </div>
         </section>
 
@@ -59,10 +91,11 @@ export default function ScoringMethodologyPage() {
           <div className="space-y-3">
             {[
               { step: '1', title: 'Evidence Gathering', desc: 'Credible public-domain evidence is gathered for each dimension and subdivision from annual reports, SEC filings, investor materials, trust pages, and other primary sources.' },
-              { step: '2', title: 'Subdivision Assessment', desc: 'Each dimension selected for deep assessment has exactly 3 structured subdivisions. Each subdivision is scored 1–4 based on accepted evidence. If evidence is insufficient, the subdivision is marked NOT SCORED.' },
-              { step: '3', title: 'Dimension Scoring', desc: 'Dimension maturity = average of applicable subdivision maturity scores (rounded to nearest integer). No weights are applied. This is a pure average per the charter.' },
-              { step: '4', title: 'Scenario Stress Test', desc: 'Base maturity is evaluated under 4 future scenarios. Each dimension may strengthen, remain stable, or weaken. Every adjustment requires rationale, evidence, and user approval.' },
-              { step: '5', title: 'Resilience Classification', desc: 'Strong: maturity ≥3 across all scenarios. Conditional: ≥3 in some but drops below in others. Exposed: base <3 or drops significantly under stress.' },
+              { step: '2', title: 'Subdivision Assessment', desc: 'AI can suggest a Level and Position from accepted evidence. A reviewer confirms or edits it. If no supported suggestion is available, enter the rating manually or leave it unscored. Score = band minimum + position points.' },
+              { step: '3', title: 'Dimension & Composite Scoring', desc: 'Dimension score = equal-weight average of numeric sub-dimension scores; at least 2 are required. Composite = equal-weight average of every qualifying dimension. Levels use band-minimum lookup; intermediate averages are not rounded.' },
+              { step: '4', title: 'Coverage & Comparison', desc: 'Report Full/Partial/Insufficient/None evidence status and overall coverage. Flag shifts greater than 1 point against the full-evidence-only average. Compare companies on shared qualifying dimensions and verify their evidence periods are comparable.' },
+              { step: '5', title: 'Scenario Stress Test', desc: 'Base maturity is evaluated under 4 future scenarios. Each dimension may strengthen, remain stable, or weaken. Every adjustment requires rationale, evidence, and user approval.' },
+              { step: '6', title: 'Resilience Classification', desc: 'Strong: maturity ≥3 across all scenarios. Conditional: ≥3 in some but drops below in others. Exposed: base <3 or drops significantly under stress.' },
             ].map(s => (
               <div key={s.step} className="flex gap-3">
                 <div className="w-8 h-8 rounded-full aurora-gradient flex items-center justify-center text-white text-sm font-bold shrink-0">
@@ -138,7 +171,7 @@ export default function ScoringMethodologyPage() {
             {[
               'No assessment claim may exist without traceable evidence or an explicitly identified assumption.',
               'Assessment Confidence is tracked separately from maturity and never influences the score.',
-              'Dimension maturity = average of subdivision scores. No arbitrary weights.',
+              'Dimension and composite scores use equal-weight numeric averages; maturity follows the score band.',
               'The system must NOT automatically advance between stages. User approval is required at every checkpoint.',
               'All user overrides must record a reason.',
               'AURORA produces framework-level leadership recommendations only — not implementation plans, consulting prescriptions, or investment advice.',

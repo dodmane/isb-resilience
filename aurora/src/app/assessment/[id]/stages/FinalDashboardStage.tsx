@@ -11,6 +11,7 @@ import { MaturityBadge } from '@/components/assessment/MaturityBadge';
 import { ConfidenceBadge } from '@/components/assessment/ConfidenceBadge';
 import { SourceLink } from '@/components/assessment/SourceLink';
 import { AuditTrail } from '@/components/assessment/AuditTrail';
+import { EvaluationReadiness, SubdimensionScoringReport } from '@/components/assessment/ScoringGovernance';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
 import { SCENARIOS } from '@/lib/framework/scenarios';
 import { classifyDimension } from '@/lib/framework/resilience';
@@ -49,7 +50,7 @@ interface Props {
 }
 
 export function FinalDashboardStage({
-  assessment, evidence,
+  assessment, evidence, subdivisionScores,
   dimensionScores, scenarioAssessments, resilienceGaps, auditTrail,
 }: Props) {
   const deepDimensions = useMemo(() => {
@@ -57,22 +58,22 @@ export function FinalDashboardStage({
       .filter(s => s.deepAssessment).map(s => s.dimensionKey);
     return DIMENSIONS.filter(d => selected.includes(d.key));
   }, [assessment.dimensionSelections]);
+  const selectedDimensionKeys = useMemo(
+    () => new Set<string>(deepDimensions.map(dimension => dimension.key)),
+    [deepDimensions]
+  );
 
   // Radar chart data
   const radarData = useMemo(() => {
     return deepDimensions.map(dim => {
       const score = dimensionScores.find(s => s.dimensionKey === dim.key);
-      const entry: Record<string, string | number> = {
+      const entry: Record<string, string | number | null> = {
         dimension: dim.name.length > 20 ? dim.name.substring(0, 18) + '…' : dim.name,
-        base: score?.normalizedScore ?? 0,
+        base: score?.normalizedScore ?? null,
       };
-      for (const sc of SCENARIOS) {
-        const sa = scenarioAssessments.find(a => a.scenarioKey === sc.key && a.dimensionKey === dim.key);
-        entry[sc.key] = sa?.scenarioMaturity ? Math.round(((sa.scenarioMaturity - 1) / 3) * 75 + 25) : 0;
-      }
       return entry;
     });
-  }, [deepDimensions, dimensionScores, scenarioAssessments]);
+  }, [deepDimensions, dimensionScores]);
 
   // Classifications
   const classifications = useMemo(() => {
@@ -92,12 +93,22 @@ export function FinalDashboardStage({
 
   // Early warning indicators
   const earlyWarnings = useMemo(
-    () => generateEarlyWarningIndicators(dimensionScores, scenarioAssessments),
-    [dimensionScores, scenarioAssessments]
+    () => generateEarlyWarningIndicators(
+      dimensionScores.filter(score => selectedDimensionKeys.has(score.dimensionKey)),
+      scenarioAssessments.filter(item => selectedDimensionKeys.has(item.dimensionKey))
+    ),
+    [dimensionScores, scenarioAssessments, selectedDimensionKeys]
   );
 
   // Evidence register
-  const acceptedEvidence = useMemo(() => evidence.filter(e => e.status === 'accepted'), [evidence]);
+  const acceptedEvidence = useMemo(
+    () => evidence.filter(e => e.status === 'accepted' && selectedDimensionKeys.has(e.dimensionKey)),
+    [evidence, selectedDimensionKeys]
+  );
+  const selectedGaps = useMemo(
+    () => resilienceGaps.filter(gap => selectedDimensionKeys.has(gap.dimensionKey)),
+    [resilienceGaps, selectedDimensionKeys]
+  );
 
   function handlePrint() {
     window.print();
@@ -119,6 +130,7 @@ export function FinalDashboardStage({
           </Button>
         </div>
       </div>
+      <EvaluationReadiness assessment={assessment} scores={subdivisionScores} />
 
       {/* Company Profile */}
       <Card>
@@ -136,30 +148,28 @@ export function FinalDashboardStage({
         </CardContent>
       </Card>
 
-      {/* 15-Dimension Radar */}
+      {/* Selected-Dimension Radar */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">15-Dimension Resilience Radar</CardTitle>
-          <CardDescription>Base maturity and scenario-adjusted profiles</CardDescription>
+          <CardTitle className="text-base">{deepDimensions.length}-Dimension Resilience Radar</CardTitle>
+          <CardDescription>Selected dimensions only. Evidence-based base scores; scenario maturity is reported separately.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[450px] print:h-[350px]">
+          {deepDimensions.length === 0 ? <p className="text-sm text-muted-foreground">No dimensions are selected for deep assessment.</p> :
+          radarData.every(item => item.base !== null) ? <div className="h-[450px] print:h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
                 <PolarGrid />
                 <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 10 }} />
                 <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 9 }} />
                 <Radar name="Base" dataKey="base" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} />
-                <Radar name="Autonomous Advantage" dataKey="autonomous_advantage" stroke="#22c55e" fill="none" strokeWidth={1} strokeDasharray="4 4" />
-                <Radar name="Storm & Signal" dataKey="storm_and_signal" stroke="#f59e0b" fill="none" strokeWidth={1} strokeDasharray="4 4" />
-                <Radar name="Exposed & Reactive" dataKey="exposed_and_reactive" stroke="#ef4444" fill="none" strokeWidth={1} strokeDasharray="4 4" />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
               </RadarChart>
             </ResponsiveContainer>
-          </div>
+          </div> : <p className="text-sm text-muted-foreground">Radar unavailable: selected dimensions have missing scores.</p>}
           <div className="flex items-start gap-2 mt-2 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
             <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            Normalized 0–100 values are an interpretive representation of the 1–4 maturity scale and do not imply mathematical precision.
+            Rubric scores are policy-based capability indicators, not probabilities of resilience. Missing evidence is not plotted as zero.
           </div>
         </CardContent>
       </Card>
@@ -206,6 +216,8 @@ export function FinalDashboardStage({
           </div>
         </CardContent>
       </Card>
+
+      <SubdimensionScoringReport assessment={assessment} scores={subdivisionScores} evidence={evidence} />
 
       {/* Scenario Comparison */}
       <Card>
@@ -342,11 +354,11 @@ export function FinalDashboardStage({
           <CardDescription>Each gap traces back to approved evidence. Recommendations are framework-level only.</CardDescription>
         </CardHeader>
         <CardContent>
-          {resilienceGaps.filter(g => g.classification !== 'strong').length === 0 ? (
+          {selectedGaps.filter(g => g.classification !== 'strong').length === 0 ? (
             <p className="text-sm text-muted-foreground">No resilience gaps identified.</p>
           ) : (
             <div className="space-y-3">
-              {resilienceGaps.filter(g => g.classification !== 'strong').map(gap => {
+              {selectedGaps.filter(g => g.classification !== 'strong').map(gap => {
                 const dim = DIMENSIONS.find(d => d.key === gap.dimensionKey);
                 const scenario = SCENARIOS.find(s => s.key === gap.scenarioKey);
                 return (

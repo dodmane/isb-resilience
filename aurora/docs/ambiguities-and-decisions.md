@@ -1,3 +1,9 @@
+# Scoring Update
+
+The historical midpoint ranges, maturity-rounding decisions and dimension overrides
+below are superseded by [scoring-engine.md](scoring-engine.md), based on the supplied
+Level + Position scoring CSVs. Remaining workbook ambiguities are documented there.
+
 # AURORA — Ambiguities, Contradictions & Design Decisions
 
 ## Ambiguities Found in the Charter

@@ -4,18 +4,18 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewCheckpoint } from '@/components/assessment/ReviewCheckpoint';
 import { MaturityBadge } from '@/components/assessment/MaturityBadge';
 import { ConfidenceBadge } from '@/components/assessment/ConfidenceBadge';
 import { SourceLink } from '@/components/assessment/SourceLink';
 import { AuditTrail } from '@/components/assessment/AuditTrail';
+import { ScoringMethodControl, SubdimensionRatingReview } from '@/components/assessment/ScoringGovernance';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
 import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
-import { MATURITY_LABELS, NORMALIZATION_RANGES } from '@/lib/framework/scoring';
+import { NORMALIZATION_RANGES } from '@/lib/framework/scoring';
 import { type DimensionKey } from '@/lib/framework/dimensions';
-import { type Assessment, type StageApproval, type MaturityLevel } from '@/types/assessment';
+import { type Assessment, type StageApproval, type MaturityLevel, type ScoringMethod } from '@/types/assessment';
 import { type Evidence } from '@/types/evidence';
 import { type SubdivisionScore } from '@/types/scoring';
 import { type AuditEntry } from '@/types/audit';
@@ -38,8 +38,7 @@ export function SubdivisionScoringStage({
   const [generating, setGenerating] = useState(false);
   const [expandedDim, setExpandedDim] = useState<string | null>(null);
   const [overrideTarget, setOverrideTarget] = useState<{ dim: string; sub: string } | null>(null);
-  const [overrideLevel, setOverrideLevel] = useState<string>('');
-  const [overrideReason, setOverrideReason] = useState('');
+  const [scoreError, setScoreError] = useState('');
 
   const stage6Approval = approvals.find(a => a.stage === 6);
   const isApproved = stage6Approval?.status === 'approved';
@@ -52,44 +51,30 @@ export function SubdivisionScoringStage({
   }, [assessment.dimensionSelections]);
 
   const hasScores = subdivisionScores.length > 0;
+  const reviewMode: ScoringMethod = assessment.scoringMethod || (assessment.scoringPolicy?.reviewMode === 'manual' ? 'manual' : 'llm_assisted');
 
   async function generateScores() {
     setGenerating(true);
     try {
-      await fetch(`/api/assessments/${assessment.id}/subdivision-scores`, { method: 'POST' });
+      const response = await fetch(`/api/assessments/${assessment.id}/subdivision-scores`, { method: 'POST' });
+      if (!response.ok) throw new Error((await response.json()).error || 'Could not generate ratings');
+      setScoreError('');
       await onRefresh();
     } catch (err) {
       console.error('Failed to generate scores:', err);
+      setScoreError(err instanceof Error ? err.message : 'Could not generate ratings');
     } finally {
       setGenerating(false);
     }
   }
 
-  async function submitOverride() {
-    if (!overrideTarget || !overrideReason.trim()) return;
-    const ml = overrideLevel === '' ? null : Number(overrideLevel) as MaturityLevel;
-    await fetch(`/api/assessments/${assessment.id}/subdivision-scores`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dimensionKey: overrideTarget.dim,
-        subdivisionKey: overrideTarget.sub,
-        maturityLevel: ml,
-        overrideReason,
-      }),
-    });
-    setOverrideTarget(null);
-    setOverrideLevel('');
-    setOverrideReason('');
-    await onRefresh();
-  }
-
   async function handleApprove(notes: string) {
-    await fetch(`/api/assessments/${assessment.id}/approvals`, {
+    const response = await fetch(`/api/assessments/${assessment.id}/approvals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: 6, status: 'approved', notes }),
     });
+    if (!response.ok) { setScoreError((await response.json()).error || 'Approval failed'); return; }
     await onRefresh();
   }
 
@@ -110,15 +95,31 @@ export function SubdivisionScoringStage({
     return evidence.filter(e => e.dimensionKey === dimKey && e.subdivisionKey === subKey && e.status === 'accepted');
   }
 
+  const manualReviewItems = reviewMode === 'llm_assisted' && hasScores
+    ? deepDimensions.flatMap(dimension => (SUBDIVISIONS[dimension.key as DimensionKey] || []).flatMap(subdivision => {
+      const score = getSubScore(dimension.key, subdivision.key);
+      if (!score) return [{ dimension, subdivision, reason: 'No AI suggestion was saved. Enter a Level and Position manually.' }];
+      const needsManualRating = score.status === 'stale' ||
+        (score.status === 'needs_review' && score.maturityLevel === null) ||
+        (score.isMockRecommendation && score.maturityLevel === null);
+      if (!needsManualRating) return [];
+      return [{ dimension, subdivision, reason: score.staleReason || score.rationale || 'AI could not suggest a supported rating. Enter one manually if the evidence supports it.' }];
+    }))
+    : [];
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold">Subdivision Scoring</h2>
         <p className="text-muted-foreground">
-          Score each subdivision using the AURORA 1–4 maturity scale based on accepted evidence.
-          Review recommendations, override if needed (with mandatory reason), then approve.
+          Accept or edit an AI-suggested Level and Position, or enter your own rating. Leave unsupported sub-dimensions unscored.
         </p>
       </div>
+      <ScoringMethodControl assessment={assessment} onRefresh={onRefresh} />
+      {scoreError && <p role="alert" className="text-sm text-destructive">{scoreError}</p>}
+      {hasScores && reviewMode === 'llm_assisted' && <Button variant="outline" onClick={generateScores} disabled={generating}>
+        {generating ? 'Getting AI suggestions...' : 'Get AI Suggestions for Unreviewed Ratings'}
+      </Button>}
 
       {/* Maturity scale reference */}
       <Card>
@@ -139,23 +140,27 @@ export function SubdivisionScoringStage({
         </CardContent>
       </Card>
 
-      {!hasScores && (
+      {!hasScores && reviewMode === 'llm_assisted' && (
         <div className="text-center py-8">
           <Button onClick={generateScores} disabled={generating} size="lg">
-            {generating ? 'Generating Recommendations...' : 'Generate Maturity Recommendations'}
+            {generating ? 'Getting AI Suggestions...' : 'Get AI Rating Suggestions'}
           </Button>
-          <p className="text-xs text-muted-foreground mt-2">
-            AI will propose maturity levels based on accepted evidence.
-          </p>
+          <p className="text-xs text-muted-foreground mt-2">AI suggests Level and Position where accepted evidence supports a rating. You confirm or edit every suggestion.</p>
         </div>
       )}
 
-      {hasScores && (
+      {(hasScores || reviewMode === 'manual') && (
         <>
-          {subdivisionScores.some(s => s.isMockRecommendation) && (
-            <div className="flex items-center gap-2 text-xs text-amber-600">
-              <FlaskConical className="h-3.5 w-3.5" />
-              Some recommendations use heuristic scoring — review each score and override where appropriate.
+          {manualReviewItems.length > 0 && (
+            <div role="status" className="flex items-start gap-2 text-xs text-amber-700">
+              <FlaskConical className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <div className="space-y-2 min-w-0 break-words">
+                <p className="font-medium">AI could not suggest a supported rating for {manualReviewItems.length} selected sub-dimension{manualReviewItems.length === 1 ? '' : 's'}. Enter a rating manually if you can support one, or leave it unscored.</p>
+                <ul className="list-disc pl-4 space-y-1">{manualReviewItems.map(item =>
+                  <li key={`${item.dimension.key}-${item.subdivision.key}`}><strong>{item.dimension.name} / {item.subdivision.name}:</strong>{' '}{item.reason}</li>
+                )}</ul>
+                <p>AI suggestions that are present also require reviewer confirmation before their score counts.</p>
+              </div>
             </div>
           )}
 
@@ -169,7 +174,7 @@ export function SubdivisionScoringStage({
                   className="cursor-pointer py-3"
                   onClick={() => setExpandedDim(isExpanded ? null : dim.key)}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     {isExpanded
                       ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                       : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
@@ -200,7 +205,7 @@ export function SubdivisionScoringStage({
 
                       return (
                         <div key={sub.key} className="border rounded-lg p-4 space-y-3">
-                          <div className="flex items-center justify-between">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
                             <div>
                               <p className="text-sm font-medium">
                                 <span className="text-muted-foreground">{dim.number}.{subIdx + 1}</span>{' '}
@@ -216,10 +221,14 @@ export function SubdivisionScoringStage({
 
                           {score?.normalizedScore !== null && score?.normalizedScore !== undefined && (
                             <div className="text-xs text-muted-foreground">
-                              Normalized: {score.normalizedScore}/100
+                              {score.position || 'Evaluator override'}: {score.normalizedScore}/100
                             </div>
                           )}
-
+                          {score && <p className="text-xs text-muted-foreground break-words">
+                            {score.status.replaceAll('_', ' ')}{score.reviewedBy && ` · Reviewer: ${score.reviewedBy}`}
+                            {score.reviewedAt && ` · ${score.reviewedAt.slice(0, 10)}`}
+                          </p>}
+                          {score?.staleReason && <p className="text-xs text-amber-700 break-words">{score.staleReason}</p>}
                           {/* Rationale */}
                           {score?.rationale && (
                             <div className="bg-muted/50 rounded p-3 text-xs">
@@ -276,54 +285,17 @@ export function SubdivisionScoringStage({
                               className="text-xs"
                               onClick={() => {
                                 setOverrideTarget({ dim: dim.key, sub: sub.key });
-                                setOverrideLevel(score?.maturityLevel?.toString() || '');
                               }}
                             >
                               <Edit3 className="h-3 w-3 mr-1" />
-                              Override Score
+                              {score?.status === 'needs_review' ? 'Review / Accept Rating' : 'Enter / Edit Rating'}
                             </Button>
                           ) : (
-                            <div className="border rounded p-3 space-y-2 bg-muted/30">
-                              <p className="text-xs font-medium">Override Maturity Level</p>
-                              <div className="flex gap-2">
-                                <select
-                                  className="border rounded px-2 py-1 text-sm bg-background"
-                                  value={overrideLevel}
-                                  onChange={e => setOverrideLevel(e.target.value)}
-                                >
-                                  <option value="">NOT SCORED</option>
-                                  {([1, 2, 3, 4] as MaturityLevel[]).map(l => (
-                                    <option key={l} value={l}>Level {l}: {MATURITY_LABELS[l]}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <Textarea
-                                placeholder="Override reason (required)"
-                                value={overrideReason}
-                                onChange={e => setOverrideReason(e.target.value)}
-                                rows={2}
-                                className="text-xs"
-                              />
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={submitOverride}
-                                  disabled={!overrideReason.trim()}
-                                >
-                                  Apply Override
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setOverrideTarget(null);
-                                    setOverrideReason('');
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
+                            <SubdimensionRatingReview
+                              key={`${dim.key}-${sub.key}-${score?.updatedAt || 'new'}`} assessmentId={assessment.id}
+                              dimensionKey={dim.key} subdivisionKey={sub.key} score={score} evidence={subEvidence}
+                              onCancel={() => setOverrideTarget(null)}
+                              onSaved={async () => { setOverrideTarget(null); setScoreError(''); await onRefresh(); }} />
                           )}
                         </div>
                       );

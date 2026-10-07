@@ -1,24 +1,24 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewCheckpoint } from '@/components/assessment/ReviewCheckpoint';
 import { MaturityBadge } from '@/components/assessment/MaturityBadge';
 import { ConfidenceBadge } from '@/components/assessment/ConfidenceBadge';
 import { AuditTrail } from '@/components/assessment/AuditTrail';
+import { EvaluationReadiness } from '@/components/assessment/ScoringGovernance';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
 import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
-import { MATURITY_LABELS } from '@/lib/framework/scoring';
+import { summarizeAssessment, type calculateEvidenceMatchedComparison } from '@/lib/framework/scoring';
 import { type DimensionKey } from '@/lib/framework/dimensions';
-import { type Assessment, type StageApproval, type MaturityLevel } from '@/types/assessment';
+import { type Assessment, type StageApproval } from '@/types/assessment';
 import { type SubdivisionScore, type DimensionScore } from '@/types/scoring';
 import { type AuditEntry } from '@/types/audit';
-import { AlertTriangle, ArrowRight, Edit3, Info } from 'lucide-react';
+import { AlertTriangle, ArrowRight } from 'lucide-react';
 
 interface Props {
   assessment: Assessment;
@@ -33,9 +33,33 @@ export function DimensionScoringStage({
   assessment, approvals, subdivisionScores, dimensionScores, auditTrail, onRefresh,
 }: Props) {
   const [calculating, setCalculating] = useState(false);
-  const [overrideDim, setOverrideDim] = useState<string | null>(null);
-  const [overrideLevel, setOverrideLevel] = useState('');
-  const [overrideReason, setOverrideReason] = useState('');
+  const [error, setError] = useState('');
+  const [companies, setCompanies] = useState<Assessment[]>([]);
+  const [comparisonId, setComparisonId] = useState('');
+  const [comparison, setComparison] = useState<ReturnType<typeof calculateEvidenceMatchedComparison> | null>(null);
+  const summary = summarizeAssessment(subdivisionScores);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/assessments').then(response => {
+      if (!response.ok) throw new Error('Could not load assessments');
+      return response.json();
+    }).then((data: Assessment[]) => { if (active) setCompanies(data); })
+      .catch(err => { if (active) setError(err.message); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!comparisonId) return;
+    fetch(`/api/assessments/${assessment.id}/dimension-scores?summary=true&compareWith=${encodeURIComponent(comparisonId)}`)
+      .then(response => {
+        if (!response.ok) throw new Error('Could not load comparison');
+        return response.json();
+      }).then(data => { if (active) setComparison(data.likeForLike); })
+      .catch(err => { if (active) setError(err.message); });
+    return () => { active = false; };
+  }, [assessment.id, comparisonId, subdivisionScores]);
 
   const stage7Approval = approvals.find(a => a.stage === 7);
   const isApproved = stage7Approval?.status === 'approved';
@@ -52,39 +76,25 @@ export function DimensionScoringStage({
   async function calculateScores() {
     setCalculating(true);
     try {
-      await fetch(`/api/assessments/${assessment.id}/dimension-scores`, { method: 'POST' });
+      const response = await fetch(`/api/assessments/${assessment.id}/dimension-scores`, { method: 'POST' });
+      if (!response.ok) throw new Error('Could not calculate dimension scores');
+      setError('');
       await onRefresh();
     } catch (err) {
       console.error('Failed to calculate scores:', err);
+      setError(err instanceof Error ? err.message : 'Could not calculate dimension scores');
     } finally {
       setCalculating(false);
     }
   }
 
-  async function submitOverride() {
-    if (!overrideDim || !overrideReason.trim()) return;
-    const ml = overrideLevel === '' ? null : Number(overrideLevel) as MaturityLevel;
-    await fetch(`/api/assessments/${assessment.id}/dimension-scores`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dimensionKey: overrideDim,
-        maturityLevel: ml,
-        overrideReason,
-      }),
-    });
-    setOverrideDim(null);
-    setOverrideLevel('');
-    setOverrideReason('');
-    await onRefresh();
-  }
-
   async function handleApprove(notes: string) {
-    await fetch(`/api/assessments/${assessment.id}/approvals`, {
+    const response = await fetch(`/api/assessments/${assessment.id}/approvals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: 7, status: 'approved', notes }),
     });
+    if (!response.ok) { setError((await response.json()).error || 'Approval failed'); return; }
     await onRefresh();
   }
 
@@ -102,24 +112,44 @@ export function DimensionScoringStage({
       <div>
         <h2 className="text-2xl font-bold">Dimension Scoring</h2>
         <p className="text-muted-foreground">
-          Dimension maturity is calculated by averaging the approved subdivision scores.
-          Review the results and override if needed.
+          Equal-weight dimension and composite scores.
         </p>
       </div>
 
-      {/* Normalization disclaimer */}
-      <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-        <Info className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-        <div className="text-xs text-blue-700 dark:text-blue-300">
-          <p className="font-medium">About Normalized Scores</p>
-          <p>
-            The 0–100 normalized score is an interpretive representation of the 1–4 maturity level
-            and does not imply mathematical precision. The maturity level (1–4) is the primary
-            assessment result. Normalization uses anchored ranges:
-            Level 1 = 25–40, Level 2 = 50–65, Level 3 = 70–85, Level 4 = 90–100.
-          </p>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <EvaluationReadiness assessment={assessment} scores={subdivisionScores} />
+      <section className="border-y py-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-4">
+          <div><p className="text-xs text-muted-foreground">Overall Composite</p>
+            <p className="text-xl font-semibold">{summary.composite.normalizedScore?.toFixed(1) ?? 'Insufficient coverage'}</p>
+          </div>
+          <MaturityBadge level={summary.composite.maturityLevel} />
+          <div className="text-sm">{summary.composite.qualifyingCount}/15 dimensions</div>
+          <div className="text-sm">{summary.scoredCount}/{summary.totalCount} sub-dimensions ({summary.coveragePercent.toFixed(1)}%)</div>
         </div>
-      </div>
+        <p className="text-sm text-muted-foreground">Bias check: {summary.composite.biasFlag.replaceAll('_', ' ')}
+          {summary.composite.biasDelta !== null && ` (${summary.composite.biasDelta > 0 ? '+' : ''}${summary.composite.biasDelta.toFixed(2)} points)`}
+        </p>
+        <label className="flex flex-wrap items-center gap-2 text-sm">Compare with <span className="text-xs text-muted-foreground">(optional)</span>
+          <select aria-label="Comparison assessment" className="border rounded px-2 py-1 bg-background max-w-full"
+            value={comparisonId} onChange={event => { setComparisonId(event.target.value); setComparison(null); setError(''); }}>
+            <option value="">Select assessment</option>
+            {companies.filter(company => company.id !== assessment.id).map(company =>
+              <option key={company.id} value={company.id}>{company.companyName}</option>
+            )}
+          </select>
+        </label>
+        {comparisonId && comparison && <div className="text-sm space-y-1">
+          <p>Like-for-like: {comparison.dimensionKeys.length}/15 shared dimensions</p>
+          <p>{comparison.matchedCount}/45 matched sub-dimensions · {comparison.reason}</p>
+          <p>{assessment.companyName}: {comparison.first.normalizedScore?.toFixed(1) ?? 'Insufficient coverage'}</p>
+          <p>{companies.find(company => company.id === comparisonId)?.companyName}: {comparison.second.normalizedScore?.toFixed(1) ?? 'Insufficient coverage'}</p>
+        </div>}
+        {comparisonId && !comparison && !error && <p className="text-xs text-muted-foreground">Loading comparison...</p>}
+      </section>
+      {hasScores && <Button variant="outline" onClick={calculateScores} disabled={calculating}>
+        {calculating ? 'Calculating...' : 'Recalculate Dimension Scores'}
+      </Button>}
 
       {!hasScores && (
         <div className="text-center py-8">
@@ -127,7 +157,7 @@ export function DimensionScoringStage({
             {calculating ? 'Calculating...' : 'Calculate Dimension Scores'}
           </Button>
           <p className="text-xs text-muted-foreground mt-2">
-            Dimension maturity = average of subdivision maturity scores.
+            Each dimension needs 2 rated sub-dimensions. The composite uses every dimension that qualifies; no minimum dimension count is set.
           </p>
         </div>
       )}
@@ -143,11 +173,11 @@ export function DimensionScoringStage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-1">
-                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 text-xs font-medium text-muted-foreground pb-2 border-b">
+              <div className="space-y-1 overflow-x-auto">
+                <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] min-w-[640px] gap-2 text-xs font-medium text-muted-foreground pb-2 border-b">
                   <span>Dimension</span>
                   <span className="text-center">Maturity</span>
-                  <span className="text-center">Normalized</span>
+                  <span className="text-center">Score</span>
                   <span className="text-center">Confidence</span>
                   <span className="text-center">Status</span>
                 </div>
@@ -155,47 +185,28 @@ export function DimensionScoringStage({
                 {deepDimensions.map(dim => {
                   const dimScore = dimensionScores.find(s => s.dimensionKey === dim.key);
                   const dimSubs = subdivisionScores.filter(s => s.dimensionKey === dim.key);
+                  const coverage = summary.dimensions[dim.key];
 
                   return (
                     <div key={dim.key}>
-                      <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 items-center py-2 border-b text-sm">
+                      <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] min-w-[640px] gap-2 items-center py-2 border-b text-sm">
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground text-xs">{dim.number}.</span>
                           <span className="font-medium">{dim.name}</span>
-                          {dimScore?.status === 'overridden' && (
-                            <Badge variant="outline" className="text-[10px]">Overridden</Badge>
-                          )}
                         </div>
                         <div className="text-center">
                           <MaturityBadge level={dimScore?.maturityLevel ?? null} />
                         </div>
                         <div className="text-center text-sm">
                           {dimScore?.normalizedScore !== null && dimScore?.normalizedScore !== undefined
-                            ? <span className="font-mono">{dimScore.normalizedScore}</span>
+                            ? <span className="font-mono">{dimScore.normalizedScore.toFixed(1)}</span>
                             : <span className="text-muted-foreground">—</span>}
                         </div>
                         <div className="text-center">
                           {dimScore ? <ConfidenceBadge confidence={dimScore.confidence} /> : '—'}
                         </div>
                         <div className="text-center">
-                          {dimScore?.status === 'insufficient_evidence' ? (
-                            <Badge variant="outline" className="text-[10px] text-amber-600">
-                              Not Scored
-                            </Badge>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-xs h-7"
-                              onClick={() => {
-                                setOverrideDim(dim.key);
-                                setOverrideLevel(dimScore?.maturityLevel?.toString() || '');
-                              }}
-                            >
-                              <Edit3 className="h-3 w-3 mr-1" />
-                              Override
-                            </Button>
-                          )}
+                          <Badge variant="outline" className="text-[10px]">{coverage.evidenceStatus} {coverage.scoredCount}/{coverage.totalCount}</Badge>
                         </div>
                       </div>
 
@@ -204,7 +215,7 @@ export function DimensionScoringStage({
                         {dimSubs.map(subScore => {
                           const sub = SUBDIVISIONS[dim.key as DimensionKey]?.find(s => s.key === subScore.subdivisionKey);
                           return (
-                            <div key={subScore.subdivisionKey} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 items-center py-1 text-xs text-muted-foreground">
+                            <div key={subScore.subdivisionKey} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] min-w-[608px] gap-2 items-center py-1 text-xs text-muted-foreground">
                               <div className="flex items-center gap-1">
                                 <ArrowRight className="h-3 w-3" />
                                 {sub?.name || subScore.subdivisionKey}
@@ -226,44 +237,6 @@ export function DimensionScoringStage({
                         })}
                       </div>
 
-                      {/* Override panel */}
-                      {overrideDim === dim.key && (
-                        <div className="ml-8 mt-2 mb-2 border rounded p-3 space-y-2 bg-muted/30">
-                          <p className="text-xs font-medium">Override {dim.name} Maturity Level</p>
-                          <select
-                            className="border rounded px-2 py-1 text-sm bg-background w-full"
-                            value={overrideLevel}
-                            onChange={e => setOverrideLevel(e.target.value)}
-                          >
-                            <option value="">NOT SCORED</option>
-                            {([1, 2, 3, 4] as MaturityLevel[]).map(l => (
-                              <option key={l} value={l}>Level {l}: {MATURITY_LABELS[l]}</option>
-                            ))}
-                          </select>
-                          <Textarea
-                            placeholder="Override reason (required)"
-                            value={overrideReason}
-                            onChange={e => setOverrideReason(e.target.value)}
-                            rows={2}
-                            className="text-xs"
-                          />
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={submitOverride} disabled={!overrideReason.trim()}>
-                              Apply Override
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => { setOverrideDim(null); setOverrideReason(''); }}>
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-
-                      {dimScore?.overrideReason && (
-                        <div className="ml-8 my-1 p-2 bg-blue-50 dark:bg-blue-950/30 rounded text-xs border border-blue-200 dark:border-blue-800">
-                          <span className="font-medium text-blue-800 dark:text-blue-200">Override: </span>
-                          <span className="text-blue-700 dark:text-blue-300">{dimScore.overrideReason}</span>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -279,9 +252,10 @@ export function DimensionScoringStage({
                 <div>
                   <p className="font-medium">Scoring Methodology</p>
                   <p>
-                    Dimension maturity = average of applicable subdivision maturity scores (rounded to nearest integer).
-                    No weights are applied. Confidence is assessed separately and does not influence the maturity score.
-                    Dimensions without scored subdivisions are marked NOT SCORED — INSUFFICIENT EVIDENCE.
+                    Each dimension averages its rated sub-dimensions. At least 2 of 3 must be rated; otherwise that dimension is not scored.
+                    The overall score averages every dimension that qualifies. If none qualify, no composite can be calculated.
+                    Missing ratings are left out, not counted as zero. The Level comes from the unrounded average&apos;s score band.
+                    Confidence describes evidence quality; it does not change the score.
                   </p>
                 </div>
               </div>

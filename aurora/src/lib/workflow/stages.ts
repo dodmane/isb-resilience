@@ -28,3 +28,8 @@ export function getNextStage(current: AssessmentStage): AssessmentStage | null {
   if (current >= TOTAL_STAGES) return null;
   return (current + 1) as AssessmentStage;
 }
+
+export function getPreviousStage(current: AssessmentStage): AssessmentStage | null {
+  if (current <= 1) return null;
+  return (current - 1) as AssessmentStage;
+}

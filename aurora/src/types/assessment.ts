@@ -1,3 +1,6 @@
+import { type ScoringPolicy } from '@/lib/framework/criteria';
+
+export type ScoringMethod = 'manual' | 'llm_assisted';
 export type MaturityLevel = 1 | 2 | 3 | 4;
 
 export type Confidence = 'high' | 'medium' | 'low';
@@ -43,6 +46,8 @@ export interface Assessment {
   scenarioNarratives: Record<string, string>;
   dimensionSelections: DimensionSelection[];
   evidencePlan: EvidencePlanItem[];
+  scoringMethod?: ScoringMethod;
+  scoringPolicy?: ScoringPolicy;
   createdAt: string;
   updatedAt: string;
 }

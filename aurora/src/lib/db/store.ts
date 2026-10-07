@@ -6,6 +6,8 @@ import { type AuditEntry } from '@/types/audit';
 import { type SubdivisionScore, type DimensionScore } from '@/types/scoring';
 import { type ScenarioAssessment } from '@/types/scenario';
 import { type ResilienceGap } from '@/types/resilience';
+import { normalize, subdivisionNumericScore, summarizeDimension, scoreToMaturity } from '@/lib/framework/scoring';
+import { evaluateCriteria, validPolicy, evidenceSnapshot } from '@/lib/framework/criteria';
 
 const DATA_DIR = path.join(process.cwd(), '.aurora-data');
 
@@ -88,11 +90,19 @@ export function deleteAssessment(id: string): boolean {
 
 // Stage Approvals
 export function getStageApprovals(assessmentId: string): StageApproval[] {
-  return readStore().stageApprovals.filter((a) => a.assessmentId === assessmentId);
+  const store = readStore();
+  const assessment = store.assessments.find(item => item.id === assessmentId);
+  const governed = validPolicy(assessment?.scoringPolicy);
+  const scores = getSubdivisionScores(assessmentId);
+  const usesDirectRatings = assessment?.scoringMethod === 'manual' || assessment?.scoringMethod === 'llm_assisted' ||
+    scores.some(score => score.ratingMethod === 'level_position');
+  const invalid = (!governed && !usesDirectRatings) || scores.some(score => score.status === 'stale' || score.status === 'needs_review');
+  return store.stageApprovals.filter((a) => a.assessmentId === assessmentId).map(approval =>
+    invalid && approval.stage >= 6 && approval.status === 'approved' ? { ...approval, status: 'pending', approvedAt: null } : approval);
 }
 
 export function getStageApproval(assessmentId: string, stage: AssessmentStage): StageApproval | undefined {
-  return readStore().stageApprovals.find((a) => a.assessmentId === assessmentId && a.stage === stage);
+  return getStageApprovals(assessmentId).find((a) => a.stage === stage);
 }
 
 export function upsertStageApproval(approval: StageApproval): StageApproval {
@@ -141,6 +151,8 @@ export function updateEvidence(id: string, updates: Partial<Evidence>): Evidence
   const idx = store.evidence.findIndex((e) => e.id === id);
   if (idx === -1) return undefined;
   store.evidence[idx] = { ...store.evidence[idx], ...updates };
+  store.stageApprovals = store.stageApprovals.map(approval => approval.assessmentId === store.evidence[idx].assessmentId && approval.stage >= 6
+    ? { ...approval, status: 'pending', approvedAt: null } : approval);
   writeStore(store);
   return store.evidence[idx];
 }
@@ -160,7 +172,42 @@ export function addAuditEntry(entry: AuditEntry): AuditEntry {
 // Subdivision Scores
 export function getSubdivisionScores(assessmentId: string): SubdivisionScore[] {
   const store = readStore();
-  return (store.subdivisionScores || []).filter((s) => s.assessmentId === assessmentId);
+  const policy = store.assessments.find(item => item.id === assessmentId)?.scoringPolicy;
+  return (store.subdivisionScores || []).filter((s) => s.assessmentId === assessmentId).map((score) => {
+    const evidence = store.evidence.filter(item => item.assessmentId === assessmentId && item.dimensionKey === score.dimensionKey && item.subdivisionKey === score.subdivisionKey);
+    const stale = (reason: string): SubdivisionScore => ({ ...score, normalizedScore: null, maturityLevel: null, absoluteScore: null, status: 'stale', staleReason: reason });
+    if (score.ratingMethod === 'level_position') {
+      const linkedEvidence = evidence.filter(item => score.evidenceIds.includes(item.id));
+      if (score.evidenceSnapshot !== evidenceSnapshot(linkedEvidence)) return stale('Linked evidence changed since rating or review');
+      const acceptedIds = new Set(evidence.filter(item => item.status === 'accepted' && !item.isMock).map(item => item.id));
+      if (score.evidenceIds.some(id => !acceptedIds.has(id)) ||
+        (score.maturityLevel !== null && (!score.position || !score.evidenceIds.length))) {
+        return stale('Rating is missing a valid Level/Position pair or accepted evidence link');
+      }
+      if (!score.reviewedAt || !score.reviewedBy?.trim()) {
+        return { ...score, normalizedScore: null, absoluteScore: null, status: 'needs_review' };
+      }
+      if (score.maturityLevel === null || !score.position) {
+        return { ...score, normalizedScore: null, maturityLevel: null, absoluteScore: null, status: 'insufficient_evidence' };
+      }
+      const normalizedScore = normalize(score.maturityLevel, score.position);
+      return { ...score, normalizedScore, absoluteScore: normalizedScore, status: score.status === 'overridden' ? 'overridden' : 'scored' };
+    }
+    if (!validPolicy(policy) || JSON.stringify(score.policy) !== JSON.stringify(policy) || !score.criteria) return stale('Legacy or different rubric: criterion review required');
+    if (score.evidenceSnapshot !== evidenceSnapshot(evidence)) return stale('Evidence changed since extraction or review');
+    try {
+      const result = evaluateCriteria(score.subdivisionKey, score.criteria, evidence, policy);
+      if (!score.reviewedAt || !score.reviewedBy?.trim()) return { ...score, normalizedScore: null, absoluteScore: null,
+        maturityLevel: result.maturityLevel, position: result.position, status: 'needs_review' };
+      const normalizedScore = subdivisionNumericScore({ ...score, maturityLevel: result.maturityLevel, position: result.position });
+      const absolute = evaluateCriteria(score.subdivisionKey, score.criteria, evidence, { ...policy, profile: 'standard' });
+      return { ...score, normalizedScore, maturityLevel: scoreToMaturity(normalizedScore), position: result.position,
+        absoluteScore: absolute.maturityLevel && absolute.position ? subdivisionNumericScore({ ...score, maturityLevel: absolute.maturityLevel, position: absolute.position, scoreOverride: null }) : null,
+        status: normalizedScore === null ? 'insufficient_evidence' : score.status };
+    } catch (error) {
+      return stale(error instanceof Error ? error.message : 'Invalid criterion trail');
+    }
+  });
 }
 
 export function upsertSubdivisionScore(score: SubdivisionScore): SubdivisionScore {
@@ -181,7 +228,12 @@ export function upsertSubdivisionScore(score: SubdivisionScore): SubdivisionScor
 // Dimension Scores
 export function getDimensionScores(assessmentId: string): DimensionScore[] {
   const store = readStore();
-  return (store.dimensionScores || []).filter((s) => s.assessmentId === assessmentId);
+  const subdivisions = getSubdivisionScores(assessmentId);
+  return (store.dimensionScores || []).filter((s) => s.assessmentId === assessmentId).map((score) => {
+    const result = summarizeDimension(score.dimensionKey, subdivisions);
+    return { ...score, normalizedScore: result.normalizedScore, maturityLevel: result.maturityLevel,
+      status: result.normalizedScore === null ? 'insufficient_evidence' : 'scored', overrideReason: null };
+  });
 }
 
 export function upsertDimensionScore(score: DimensionScore): DimensionScore {

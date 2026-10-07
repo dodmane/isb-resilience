@@ -6,17 +6,36 @@ import {
   getDimensionScores,
   upsertDimensionScore,
   addAuditEntry,
+  invalidateApprovalsAfterStage,
+  getEvidenceForAssessment,
+  getAuditTrail,
 } from '@/lib/db/store';
-import { calculateDimensionMaturity, normalize } from '@/lib/framework/scoring';
+import { summarizeDimension, summarizeAssessment, calculateEvidenceMatchedComparison } from '@/lib/framework/scoring';
 import { aggregateConfidence } from '@/lib/llm/scoring-recommendation';
 import { type DimensionScore } from '@/types/scoring';
-import { type MaturityLevel, type Confidence } from '@/types/assessment';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const assessment = getAssessment(id);
+  if (!assessment) return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
+  if (request.nextUrl.searchParams.get('summary') === 'true') {
+    const subdivisions = getSubdivisionScores(id);
+    const summary = summarizeAssessment(subdivisions);
+    if (request.nextUrl.searchParams.get('export') === 'true') return NextResponse.json({ ...summary, policy: assessment.scoringPolicy || null,
+      companyName: assessment.companyName, generatedAt: new Date().toISOString(), ratings: subdivisions, evidence: getEvidenceForAssessment(id), audit: getAuditTrail(id) });
+    const comparisonId = request.nextUrl.searchParams.get('compareWith');
+    if (comparisonId) {
+      const other = getAssessment(comparisonId);
+      if (!other) return NextResponse.json({ error: 'Comparison assessment not found' }, { status: 404 });
+      const otherScores = getSubdivisionScores(comparisonId);
+      const comparison = summarizeAssessment(otherScores);
+      return NextResponse.json({ ...summary, comparison, likeForLike: calculateEvidenceMatchedComparison(subdivisions, otherScores, assessment.scoringPolicy, other.scoringPolicy) });
+    }
+    return NextResponse.json(summary);
+  }
   const scores = getDimensionScores(id);
   return NextResponse.json(scores);
 }
@@ -39,10 +58,9 @@ export async function POST(
 
   for (const dimSel of deepDims) {
     const dimSubs = subScores.filter(s => s.dimensionKey === dimSel.dimensionKey);
-    const subLevels = dimSubs.map(s => s.maturityLevel);
-    const maturity = calculateDimensionMaturity(subLevels);
+    const result = summarizeDimension(dimSel.dimensionKey, subScores);
     const confidences = dimSubs
-      .filter(s => s.maturityLevel !== null)
+      .filter(s => s.normalizedScore !== null)
       .map(s => s.confidence);
     const confidence = aggregateConfidence(confidences);
 
@@ -50,10 +68,10 @@ export async function POST(
       id: uuidv4(),
       assessmentId: id,
       dimensionKey: dimSel.dimensionKey,
-      maturityLevel: maturity,
-      normalizedScore: maturity ? normalize(maturity) : null,
+      maturityLevel: result.maturityLevel,
+      normalizedScore: result.normalizedScore,
       confidence,
-      status: maturity === null ? 'insufficient_evidence' : 'scored',
+      status: result.normalizedScore === null ? 'insufficient_evidence' : 'scored',
       overrideReason: null,
       subdivisionScoreIds: dimSubs.map(s => s.id),
       createdAt: now,
@@ -64,6 +82,7 @@ export async function POST(
     results.push(score);
   }
 
+  invalidateApprovalsAfterStage(id, 6);
   addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
@@ -80,60 +99,6 @@ export async function POST(
   return NextResponse.json(results);
 }
 
-// Override a dimension score
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const body = await request.json();
-  const { dimensionKey, maturityLevel, overrideReason, confidence } = body as {
-    dimensionKey: string;
-    maturityLevel: MaturityLevel | null;
-    overrideReason: string;
-    confidence?: Confidence;
-  };
-
-  if (!dimensionKey) {
-    return NextResponse.json({ error: 'dimensionKey required' }, { status: 400 });
-  }
-
-  if (maturityLevel !== null && !overrideReason?.trim()) {
-    return NextResponse.json({ error: 'Override reason required' }, { status: 400 });
-  }
-
-  const existing = getDimensionScores(id);
-  const current = existing.find(s => s.dimensionKey === dimensionKey);
-
-  const now = new Date().toISOString();
-  const score: DimensionScore = {
-    id: current?.id || uuidv4(),
-    assessmentId: id,
-    dimensionKey,
-    maturityLevel,
-    normalizedScore: maturityLevel ? normalize(maturityLevel) : null,
-    confidence: confidence || current?.confidence || 'low',
-    status: maturityLevel === null ? 'insufficient_evidence' : 'overridden',
-    overrideReason: overrideReason || null,
-    subdivisionScoreIds: current?.subdivisionScoreIds || [],
-    createdAt: current?.createdAt || now,
-    updatedAt: now,
-  };
-
-  upsertDimensionScore(score);
-
-  addAuditEntry({
-    id: uuidv4(),
-    assessmentId: id,
-    action: 'dimension_score_overridden',
-    entityType: 'dimension_score',
-    entityId: score.id,
-    oldValue: current ? { maturityLevel: current.maturityLevel } : null,
-    newValue: { maturityLevel, overrideReason },
-    reason: overrideReason || 'Dimension score override',
-    actor: 'user',
-    timestamp: now,
-  });
-
-  return NextResponse.json(score);
+export async function PATCH() {
+  return NextResponse.json({ error: 'Dimension scores are formula-only. Update subdivision ratings instead.' }, { status: 405 });
 }

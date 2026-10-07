@@ -6,6 +6,10 @@ export function isLLMConfigured(): boolean {
   return !!ANTHROPIC_API_KEY;
 }
 
+export function getScoringModel(): string {
+  return CLAUDE_MODEL;
+}
+
 export async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('LLM not configured — set ANTHROPIC_API_KEY');

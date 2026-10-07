@@ -83,6 +83,9 @@ SubdivisionScore ──N:M── Evidence (via subdivision_evidence join)
 
 ### dimension_scores
 
+Dimension results are formula-only under the current scoring model; legacy
+dimension overrides are ignored. See [scoring-engine.md](scoring-engine.md).
+
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid PK | |
@@ -92,7 +95,7 @@ SubdivisionScore ──N:M── Evidence (via subdivision_evidence join)
 | normalized_score | numeric | 0–100 or null |
 | is_selected_for_deep | boolean | Whether selected for SaaS/IT deep assessment |
 | confidence | enum('high','medium','low') | |
-| status | enum('not_started','insufficient_evidence','scored','overridden') | |
+| status | enum('not_started','insufficient_evidence','scored','overridden','needs_review','stale') | |
 | override_reason | text | Required when overridden |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
@@ -107,6 +110,13 @@ SubdivisionScore ──N:M── Evidence (via subdivision_evidence join)
 | dimension_key | text | |
 | subdivision_key | text | One of 3 per dimension |
 | maturity_level | int | 1–4 or null |
+| position | enum('Low','Mid','High') | Required with Level for an ordinary rating; null for missing evidence |
+| rating_method | enum('level_position','criteria') | Direct Level/Position for new ratings; criteria denotes legacy records |
+| rationale | text | AI suggestion or reviewer rationale |
+| evidence_ids | array | Accepted evidence records cited for the rating |
+| reviewed_by / reviewed_at | text / timestamp | Reviewer confirmation; proposals are excluded until confirmed |
+| score_override | numeric | Legacy endpoint exceptions only; not offered in the simplified UI |
+| criteria / policy | json | Legacy criterion-backed record compatibility |
 | normalized_score | numeric | 0–100 or null |
 | confidence | enum('high','medium','low') | |
 | status | enum('not_started','insufficient_evidence','scored','overridden') | |

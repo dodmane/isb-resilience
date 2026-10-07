@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAssessment, updateAssessment, getStageApprovals, deleteAssessment } from '@/lib/db/store';
+import { v4 as uuidv4 } from 'uuid';
+import { getAssessment, updateAssessment, getStageApprovals, deleteAssessment, invalidateApprovalsAfterStage, addAuditEntry } from '@/lib/db/store';
 import { canAdvanceToStage } from '@/lib/workflow/stages';
-import { type AssessmentStage } from '@/types/assessment';
+import { isCriterionReviewMode, getCriterionReviewMode } from '@/lib/framework/criteria';
+import { type AssessmentStage, type ScoringMethod } from '@/types/assessment';
 
 export async function GET(
   _request: NextRequest,
@@ -27,6 +29,22 @@ export async function PATCH(
   }
 
   const body = await request.json();
+  if ('scoringPolicy' in body) {
+    return NextResponse.json({ error: 'Use the scoring-policy endpoint; a frozen policy cannot be overwritten' }, { status: 400 });
+  }
+
+  if ('scoringMethod' in body) {
+    if (!isCriterionReviewMode(body.scoringMethod)) return NextResponse.json({ error: 'scoringMethod must be manual or llm_assisted' }, { status: 400 });
+    const previousMethod: ScoringMethod = assessment.scoringMethod || getCriterionReviewMode(assessment.scoringPolicy);
+    const updated = updateAssessment(id, { scoringMethod: body.scoringMethod });
+    if (previousMethod !== body.scoringMethod) {
+      invalidateApprovalsAfterStage(id, 5);
+      addAuditEntry({ id: uuidv4(), assessmentId: id, action: 'scoring_method_changed', entityType: 'assessment', entityId: id,
+        oldValue: { scoringMethod: previousMethod }, newValue: { scoringMethod: body.scoringMethod },
+        reason: 'Stage 6 scoring method changed; scoring approval reopened', actor: 'user', timestamp: new Date().toISOString() });
+    }
+    return NextResponse.json(updated);
+  }
 
   if (body.currentStage !== undefined) {
     const targetStage = body.currentStage as AssessmentStage;

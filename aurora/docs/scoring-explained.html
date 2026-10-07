@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How AURORA scores subdimensions, averages maturity levels, normalizes scores, and handles missing evidence.">
+  <title>AURORA | How Scoring Works</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #202824;
+      --muted: #59645e;
+      --accent: #146448;
+      --line: #d5dfda;
+      --paper: #ffffff;
+      --tint: #edf5f0;
+      --warning: #fff2e5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: repeating-linear-gradient(90deg, #f4f7f5 0, #f4f7f5 79px, #eaf0ec 80px);
+      color: var(--ink);
+      font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 48px 56px; background: var(--paper); }
+    header { border-top: 5px solid var(--accent); padding-top: 24px; padding-bottom: 24px; }
+    .brand { margin: 0 0 8px; color: var(--accent); font-weight: 700; }
+    h1, h2 { font-family: Georgia, "Times New Roman", serif; line-height: 1.2; letter-spacing: 0; }
+    h1 { margin: 0 0 16px; font-size: 42px; }
+    h2 { margin: 0 0 20px; font-size: 28px; }
+    h3 { margin: 24px 0 12px; font-size: 18px; }
+    p { margin: 0 0 16px; }
+    .lead { color: var(--muted); font-size: 18px; max-width: 720px; }
+    section { padding: 32px 0; border-top: 1px solid var(--line); }
+    a { color: var(--accent); text-underline-offset: 3px; overflow-wrap: anywhere; }
+    li { margin-bottom: 8px; }
+    ul { padding-left: 24px; }
+    .table-scroll { overflow-x: auto; margin: 20px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    caption { text-align: left; color: var(--muted); padding-bottom: 10px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--tint); font-weight: 600; }
+    .formula { background: var(--tint); border-left: 3px solid var(--accent); padding: 16px 20px; margin: 20px 0; overflow-wrap: anywhere; }
+    .notice { background: var(--warning); border-left: 3px solid #a35a19; padding: 16px 20px; margin: 20px 0; }
+    .formula p:last-child, .notice p:last-child { margin-bottom: 0; }
+    code { font-family: Menlo, Consolas, monospace; font-size: 0.9em; overflow-wrap: anywhere; }
+    footer { border-top: 2px solid var(--accent); padding-top: 24px; color: var(--muted); }
+    @media (max-width: 640px) {
+      main { padding: 24px 20px; }
+      h1 { font-size: 32px; }
+      h2 { font-size: 24px; }
+      th, td { padding: 10px; }
+      section { padding: 24px 0; }
+    }
+    @media print {
+      body { background: white; font-size: 11pt; }
+      main { max-width: none; padding: 0; }
+      h1 { font-size: 28pt; }
+      h2 { font-size: 20pt; }
+      tr, .formula, .notice { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+      .table-scroll { overflow: visible; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="brand">AURORA</p>
+      <h1>How Scoring Works</h1>
+      <p class="lead">From accepted evidence to subdimension maturity, dimension averages, and normalized scores.</p>
+      <p>This explanation describes the current implementation, including where it differs from the scoring documentation.</p>
+    </header>
+
+    <section aria-labelledby="subdimensions">
+      <h2 id="subdimensions">1. Scoring Subdimensions</h2>
+      <p>Each subdimension gets a <strong>maturity level from 1 to 4</strong>, or <code>null</code> if there is insufficient evidence.</p>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Maturity levels and normalized scores">
+        <table>
+          <caption>Maturity levels and their fixed normalized values</caption>
+          <thead>
+            <tr><th scope="col">Level</th><th scope="col">Meaning</th><th scope="col">Range</th><th scope="col">Actual score</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">1</th><td>Basic / Not Met</td><td>25&ndash;40</td><td><strong>33</strong></td></tr>
+            <tr><th scope="row">2</th><td>Developing / Partially Met</td><td>50&ndash;65</td><td><strong>58</strong></td></tr>
+            <tr><th scope="row">3</th><td>Established / Mostly Met</td><td>70&ndash;85</td><td><strong>78</strong></td></tr>
+            <tr><th scope="row">4</th><td>Advanced / Fully Met</td><td>90&ndash;100</td><td><strong>95</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Only <strong>accepted evidence assigned to that specific subdimension</strong> is used. Proposed or rejected evidence does not count.</p>
+      <h3>When an LLM is configured</h3>
+      <p>The AI reads the evidence claims and recommends a maturity level, confidence, and rationale. There are <strong>no coded numerical thresholds</strong> such as &ldquo;NRR above 110% means Level 3.&rdquo; The level is an AI judgment against the rubric. Users can override a maturity level with a reason.</p>
+      <h3>When the LLM is unavailable or fails</h3>
+      <p>A mock heuristic uses evidence-quality signals:</p>
+      <ul>
+        <li>Three or more accepted items, with at least one primary source and at least one resolved URL: <strong>Level 3, high confidence</strong>.</li>
+        <li>Otherwise, two or more accepted items with a primary source or resolved URL: <strong>Level 3, medium confidence</strong>.</li>
+        <li>Otherwise, at least one accepted item with a resolved URL: <strong>Level 2, medium confidence</strong>.</li>
+        <li>Otherwise, any accepted evidence: <strong>Level 2, low confidence</strong>.</li>
+      </ul>
+      <p>A primary source here means an annual report or regulatory filing. The primary source and resolved URL do not have to belong to the same evidence item.</p>
+      <div class="notice">
+        <p><strong>Fallback limitation:</strong> the heuristic only produces Levels 2 and 3. It measures evidence signals, not the organizational capability described by the evidence.</p>
+      </div>
+      <p>Implementation: <a href="../src/lib/llm/scoring-recommendation.ts">scoring recommendation logic</a>.</p>
+    </section>
+
+    <section aria-labelledby="averaging">
+      <h2 id="averaging">2. Averaging Into a Dimension</h2>
+      <p>The system averages <strong>maturity levels, not normalized scores</strong>. All scored subdimensions have equal weight.</p>
+      <div class="formula">
+        <p><strong>Dimension maturity</strong> = round(sum of non-null subdimension levels / number of non-null subdimension levels)</p>
+      </div>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Example subdimension scores">
+        <table>
+          <caption>Example: Revenue Durability</caption>
+          <thead>
+            <tr><th scope="col">Subdimension</th><th scope="col">Maturity</th><th scope="col">Normalized score</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Retention</th><td>2</td><td>58</td></tr>
+            <tr><th scope="row">Pricing power</th><td>3</td><td>78</td></tr>
+            <tr><th scope="row">Customer concentration</th><td>3</td><td>78</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The maturity average is <code>(2 + 3 + 3) / 3 = 2.67</code>, rounded to <strong>Level 3</strong>. The dimension normalized score is therefore <strong>78</strong>.</p>
+      <p>It does <strong>not</strong> average 58, 78, and 78 to get 71.33. Rounding happens before the dimension is normalized; halfway values round up.</p>
+      <p>Implementation: <a href="../src/lib/framework/scoring.ts">maturity averaging and normalization</a>.</p>
+    </section>
+
+    <section aria-labelledby="normalization">
+      <h2 id="normalization">3. Choosing a Value Within the Range</h2>
+      <p>The system <strong>always takes the rounded midpoint</strong>. Evidence strength and confidence do not move the score within the range.</p>
+      <div class="formula">
+        <p><strong>Normalized score</strong> = round((range minimum + range maximum) / 2)</p>
+        <p>For Level 1: <code>(25 + 40) / 2 = 32.5</code>, rounded to <strong>33</strong>.</p>
+      </div>
+      <p>A &ldquo;weak Level 1&rdquo; and a &ldquo;strong Level 1&rdquo; both receive <strong>33</strong>. This is a fixed representation of the maturity level, not continuous statistical normalization.</p>
+      <div class="notice">
+        <p><strong>Documentation versus implementation:</strong> the documentation mentions manual within-range adjustment, but the current scoring APIs accept a maturity level and recalculate its midpoint. They do not implement choosing, for example, 28 versus 38.</p>
+      </div>
+      <p>References: <a href="scoring-engine.md">scoring documentation</a>, <a href="../src/app/api/assessments/[id]/subdivision-scores/route.ts">subdimension scoring API</a>, and <a href="../src/app/api/assessments/[id]/dimension-scores/route.ts">dimension scoring API</a>.</p>
+    </section>
+
+    <section aria-labelledby="missing-evidence">
+      <h2 id="missing-evidence">4. Handling Missing Evidence</h2>
+      <p>Missing evidence means <strong>unknown</strong>, not zero and not Level 1. A subdimension with no accepted evidence receives <code>null</code> maturity, <code>null</code> normalized score, low confidence, and an insufficient-evidence status.</p>
+      <p>The LLM can also return <code>null</code> when accepted evidence exists but is inadequate. Null maturity levels are excluded from the dimension average.</p>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Examples of missing evidence handling">
+        <table>
+          <caption>Partial and fully missing subdimension scores</caption>
+          <thead>
+            <tr><th scope="col">Levels</th><th scope="col">Calculation</th><th scope="col">Dimension result</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row"><code>2, 3, null</code></th><td>5 / 2 = 2.5, rounded up</td><td>Level 3 &rarr; <strong>78</strong></td></tr>
+            <tr><th scope="row"><code>3, null, 4</code></th><td>7 / 2 = 3.5, rounded up</td><td>Level 4 &rarr; <strong>95</strong></td></tr>
+            <tr><th scope="row"><code>2, null, null</code></th><td>Only the available level</td><td>Level 2 &rarr; <strong>58</strong></td></tr>
+            <tr><th scope="row"><code>null, null, null</code></th><td>No average possible</td><td>Not scored; normalized score is <code>null</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Confidence is separate from maturity</h3>
+      <p>Dimension confidence is aggregated only from scored subdimensions. The code maps low to 1, medium to 2, and high to 3, then averages: an average of at least 2.5 is high; at least 1.5 is medium; otherwise it is low. No scored subdimensions means low confidence.</p>
+      <div class="notice">
+        <p><strong>Implementation gap:</strong> the documentation says partial coverage should force low dimension confidence. The actual code does not enforce that rule. One high-confidence subdimension can produce a high-confidence dimension even when the other two are missing.</p>
+      </div>
+      <p>Confidence does not change the maturity or normalized score. Missing subdimensions are excluded <strong>without a numerical penalty</strong>.</p>
+      <p>Implementation: <a href="../src/app/api/assessments/[id]/dimension-scores/route.ts">dimension calculation</a> and <a href="../src/lib/llm/scoring-recommendation.ts">confidence aggregation</a>.</p>
+    </section>
+
+    <footer>
+      <p><strong>In short:</strong> accepted evidence &rarr; recommended maturity &rarr; equal-weight average of available levels &rarr; rounding &rarr; fixed range midpoint.</p>
+    </footer>
+  </main>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { canAdvanceToStage, isStageAccessible, getNextStage } from '@/lib/workflow/stages';
+import { canAdvanceToStage, isStageAccessible, getNextStage, getPreviousStage } from '@/lib/workflow/stages';
 import { type AssessmentStage, type ApprovalStatus } from '@/types/assessment';
 
 describe('Workflow Stage Machine', () => {
@@ -61,6 +61,16 @@ describe('Workflow Stage Machine', () => {
 
     it('should return null at the final stage', () => {
       expect(getNextStage(10)).toBe(null);
+    });
+  });
+
+  describe('getPreviousStage', () => {
+    it.each([2, 3, 4, 5, 6, 7, 8, 9, 10])('returns the prior stage for stage %s', (stage) => {
+      expect(getPreviousStage(stage as AssessmentStage)).toBe(stage - 1);
+    });
+
+    it('does not go before Company Discovery', () => {
+      expect(getPreviousStage(1)).toBeNull();
     });
   });
 });

@@ -127,19 +127,19 @@ points to look for, which subdivisions need evidence.
 
 ### Stage 6 — Subdivision Scoring
 
-**Goal:** Score each subdivision (1–4 maturity) from evidence.
+**Goal:** Assign each sub-dimension a Level (1–4) and Position (Low/Mid/High) from accepted evidence.
 
-**LLM role:** Propose a maturity level for each subdivision based on the
-accepted evidence. Provide rationale.
+**AI-assisted mode:** The LLM proposes Level, Position, evidence references, confidence and rationale when accepted evidence is available. The proposal is not a final score until a user confirms or edits it.
+
+**Manual mode:** Enter Level and Position directly, or leave the sub-dimension unscored when evidence does not support a rating.
 
 **User actions:**
-- Review proposed scores with linked evidence
-- Override any score (with reason recorded)
-- Mark as NOT SCORED — INSUFFICIENT EVIDENCE
-- Set confidence (HIGH / MEDIUM / LOW)
+- Accept or edit AI proposals, or enter ratings manually
+- Link accepted evidence and record reviewer identity/rationale
+- Leave unsupported sub-dimensions unscored
 - Approve & Continue
 
-**Gate output:** Subdivision maturity scores locked.
+**Gate output:** Each selected sub-dimension has a reviewed Level/Position rating or an explicit unscored result. Stage approval requires all selected sub-dimensions to be reviewed.
 
 ---
 
@@ -148,13 +148,15 @@ accepted evidence. Provide rationale.
 **Goal:** Calculate dimension scores from subdivision averages.
 
 **Application logic (deterministic):**
-- Dimension maturity = average of subdivision maturity scores
-- Normalized score = map maturity to 0–100 range
+- Dimension score = numeric average of scored subdivisions; minimum 2 required
+- Dimension maturity = band-minimum lookup on its score
+- Composite = equal-weight average of all qualifying dimensions; shown when at least one qualifies
+- Report evidence coverage, partial-evidence bias and like-for-like comparison
 - Confidence = derived from subdivision confidences
 
 **User actions:**
 - Review calculated dimension scores
-- Override dimension score (with reason)
+- Correct underlying subdivision ratings when needed (dimensions are formula-only)
 - Approve & Continue
 
 **Gate output:** 15-dimension maturity profile locked.

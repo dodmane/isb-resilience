@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A stage-by-stage guide to AURORA, showing what the language model proposes, what the framework calculates, and what reviewers must verify.">
+  <title>AURORA | Workflow and LLM Boundaries</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1c2925;
+      --muted: #53645d;
+      --line: #d3ded8;
+      --paper: #fff;
+      --canvas: #edf2ee;
+      --green: #176548;
+      --green-pale: #e7f2eb;
+      --blue: #265c79;
+      --blue-pale: #eaf2f6;
+      --amber: #81500d;
+      --amber-pale: #fff4de;
+      --red: #873b34;
+      --red-pale: #faece9;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: repeating-linear-gradient(0deg, var(--canvas) 0, var(--canvas) 31px, #e5ebe6 32px);
+      color: var(--ink);
+      font: 16px/1.65 "Avenir Next", Avenir, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1120px; margin: 0 auto; padding: 36px 56px 64px; background: var(--paper); }
+    header { padding: 18px 0 30px; border-top: 5px solid var(--green); }
+    .brand { margin: 0 0 10px; color: var(--green); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    h1, h2 { font-family: Georgia, "Times New Roman", serif; line-height: 1.18; letter-spacing: 0; }
+    h1 { margin: 0 0 14px; max-width: 820px; font-size: 44px; }
+    h2 { margin: 0 0 16px; font-size: 29px; }
+    h3 { margin: 22px 0 8px; font-size: 18px; line-height: 1.3; }
+    p { margin: 0 0 13px; }
+    a { color: var(--green); text-underline-offset: 3px; overflow-wrap: anywhere; }
+    .lead { max-width: 820px; color: var(--muted); font-size: 18px; }
+    .stamp { color: var(--muted); font-size: 12px; }
+    nav { position: sticky; top: 0; z-index: 2; margin: 0 -8px 28px; padding: 10px 8px; background: #fff; border-block: 1px solid var(--line); }
+    nav ul { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+    nav a { color: var(--ink); }
+    section { padding: 30px 0; border-top: 1px solid var(--line); scroll-margin-top: 64px; }
+    .intro-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--line); }
+    .intro-grid > div { padding: 18px 20px 16px 0; }
+    .intro-grid > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+    .intro-grid p:last-child { margin-bottom: 0; }
+    .label { display: inline-block; margin: 0 5px 4px 0; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 800; line-height: 1.6; }
+    .label-llm { background: var(--blue-pale); color: var(--blue); }
+    .label-code { background: var(--green-pale); color: var(--green); }
+    .label-human { background: var(--amber-pale); color: var(--amber); }
+    .label-risk { background: var(--red-pale); color: var(--red); }
+    .callout { margin: 18px 0; padding: 15px 18px; border-left: 4px solid var(--amber); background: var(--amber-pale); }
+    .callout-risk { border-color: var(--red); background: var(--red-pale); }
+    .callout p:last-child { margin-bottom: 0; }
+    .pipeline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin: 24px 0 8px; border-block: 1px solid var(--line); }
+    .pipeline div { min-height: 86px; padding: 13px 20px 12px 0; font-size: 13px; font-weight: 700; }
+    .pipeline div + div { padding-left: 17px; border-left: 1px solid var(--line); }
+    .pipeline span { display: block; margin-bottom: 5px; color: var(--green); font: 700 11px/1.3 "Avenir Next", Avenir, sans-serif; text-transform: uppercase; }
+    .stage { padding: 25px 0 28px; border-top: 1px solid var(--line); scroll-margin-top: 68px; }
+    .stage-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+    .stage-number { flex: 0 0 auto; color: var(--green); font: 700 15px/1 Georgia, serif; }
+    .stage h3 { margin: 0; font-size: 21px; }
+    .stage-summary { margin: 0 0 16px; color: var(--muted); }
+    .stage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+    .stage-grid > div { padding-top: 12px; border-top: 1px solid #e8eeea; }
+    .stage-grid h4 { margin: 0 0 6px; font-size: 13px; }
+    .stage-grid p, .stage-grid ul { margin: 0 0 10px; font-size: 14px; }
+    ul { padding-left: 21px; }
+    li { margin: 0 0 6px; }
+    .stage-note { margin-top: 12px; color: var(--muted); font-size: 13px; }
+    .table-wrap { overflow-x: auto; margin: 16px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    caption { padding: 0 0 8px; color: var(--muted); text-align: left; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--green-pale); }
+    code { font-family: Menlo, Consolas, monospace; font-size: .9em; overflow-wrap: anywhere; }
+    .formula { margin: 18px 0; padding: 15px 18px; border-left: 4px solid var(--green); background: var(--green-pale); font-weight: 700; }
+    .formula p:last-child { margin-bottom: 0; }
+    footer { margin-top: 24px; padding-top: 18px; border-top: 3px solid var(--green); color: var(--muted); font-size: 13px; }
+    @media (max-width: 760px) {
+      main { padding: 24px 20px 42px; }
+      h1 { font-size: 34px; }
+      h2 { font-size: 25px; }
+      .intro-grid { grid-template-columns: 1fr; }
+      .intro-grid > div, .intro-grid > div + div { padding: 13px 0; border-left: 0; }
+      .intro-grid > div + div { border-top: 1px solid var(--line); }
+      .pipeline { grid-template-columns: 1fr; }
+      .pipeline div, .pipeline div + div { min-height: 0; padding: 10px 0; border-left: 0; }
+      .pipeline div + div { border-top: 1px solid var(--line); }
+      .stage-grid { grid-template-columns: 1fr; gap: 5px; }
+      th, td { min-width: 145px; padding: 9px; }
+    }
+    @media print {
+      body { background: #fff; font-size: 10.5pt; }
+      main { max-width: none; padding: 0; }
+      nav { position: static; }
+      h1 { font-size: 28pt; }
+      h2 { font-size: 19pt; }
+      .stage, section, tr, .callout, .formula { break-inside: avoid; }
+      .table-wrap { overflow: visible; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="brand">AURORA · Assessment guide</p>
+      <h1>What Happens at Each Step</h1>
+      <p class="lead">A practical guide to the ten-stage SaaS resilience workflow, showing where the language model drafts or interprets, where fixed framework rules apply, and where human review is essential.</p>
+      <p class="stamp">Reflects the current implementation. The Level descriptions and score mapping are provisional; they have not been empirically calibrated.</p>
+    </header>
+
+    <nav aria-label="Guide sections">
+      <ul>
+        <li><a href="#read-first">Read first</a></li>
+        <li><a href="#stages">Ten stages</a></li>
+        <li><a href="#scoring">How scores are calculated</a></li>
+        <li><a href="#assumptions">Assumptions and risks</a></li>
+        <li><a href="#controls">Review checklist</a></li>
+      </ul>
+    </nav>
+
+    <section id="read-first" aria-labelledby="read-first-title">
+      <h2 id="read-first-title">Read This First</h2>
+      <p>A language model (LLM) produces language and structured proposals from prompts and the information supplied to it. A prompt can tell it to follow rules, but a prompt is not proof that its answer is true or compliant. The application enforces only the checks implemented in code. A human must verify source accuracy and approve the assessment.</p>
+      <div class="intro-grid" aria-label="Behavior labels">
+        <div><span class="label label-llm">LLM proposal</span><p>The model generates, summarizes, classifies or interprets. Unless a stage says otherwise, the output is a hypothesis to review, not verified fact.</p></div>
+        <div><span class="label label-code">Framework / code</span><p>Fixed catalogues, validation, formulas, thresholds and status rules. These are repeatable, but the rubric itself can still be provisional.</p></div>
+        <div><span class="label label-human">Human decision</span><p>A person checks evidence, chooses Manual or AI suggestions, confirms or edits ratings and approves each workflow gate.</p></div>
+      </div>
+      <div class="pipeline" aria-label="Assessment information flow">
+        <div><span>1 · Describe</span>Company and context</div>
+        <div><span>2 · Select</span>Dimensions and evidence plan</div>
+        <div><span>3 · Gather</span>Proposed source records</div>
+        <div><span>4 · Rate</span>Level, Position and review</div>
+        <div><span>5 · Report</span>Rules, scenarios and dashboard</div>
+      </div>
+      <div class="callout callout-risk"><p><strong>Important: “LLM follows the framework” is a goal, not an automatic guarantee.</strong> Structured JSON, prompts and evidence checks reduce errors. They do not give the model a live, verified knowledge base or independently prove that a statement is true.</p></div>
+      <p><span class="label label-risk">Key limitation</span> The current API sends prompts to the configured model; it does not give the model a browser/search tool. “Research” prompts can draw on model knowledge and supplied text. Any returned claims, quotations, dates and URLs need source-level verification.</p>
+    </section>
+
+    <section id="stages" aria-labelledby="stages-title">
+      <h2 id="stages-title">The Ten Stages</h2>
+      <article class="stage" id="stage-1">
+        <div class="stage-head"><span class="stage-number">01</span><h3>Company Discovery</h3></div>
+        <p class="stage-summary">Establish the company profile that later recommendations and narratives use as context.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-llm">LLM proposal</span> What it does</h4><p>When configured, it drafts the company name, description, industry, size category and a small set of public-fact evidence items. It is asked to use well-known public information and not fabricate data or URLs.</p></div>
+          <div><h4><span class="label label-code">Code behavior</span> What is enforced</h4><p>The response is parsed as JSON and stored. Evidence starts as <code>proposed</code>, not accepted. There is no independent source fetch or factual cross-check in this step.</p></div>
+          <div><h4><span class="label label-risk">Assumptions / risks</span> Where judgment enters</h4><p>The model may rely on remembered information, infer an industry or size, or return a plausible but incorrect source detail. Its prompt classifies small as under $500M revenue, medium as $500M–$5B, and large as over $5B; these are prompt conventions, not verified framework rules. Missing model fields can default to Technology or medium.</p></div>
+          <div><h4><span class="label label-human">Reviewer action</span> What to check</h4><p>Correct the profile. Open original sources, compare every material claim and date, and accept or reject each evidence item. Do not treat a returned URL as verified: current code treats a non-null URL as resolved without fetching it.</p></div>
+        </div>
+        <p class="stage-note">No maturity score is assigned here. When the LLM is unavailable or fails, the app can use mock profiles/evidence; those must be replaced with real research before evaluation.</p>
+      </article>
+
+      <article class="stage" id="stage-2">
+        <div class="stage-head"><span class="stage-number">02</span><h3>Scenario Context</h3></div>
+        <p class="stage-summary">Describe four possible operating futures in terms relevant to the company.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-llm">LLM proposal</span> What it does</h4><p>Drafts narrative text for the four predefined combinations of AI implementation depth and macroeconomic disruption, using the company name, industry and size provided.</p></div>
+          <div><h4><span class="label label-code">Framework</span> What is fixed</h4><p>The four scenario keys and their broad premises are defined by AURORA. The model is asked to return text for those keys; the application does not calculate probabilities for the futures.</p></div>
+          <div><h4><span class="label label-risk">Assumptions</span> What is not evidence</h4><p>The scenario conditions are intentional “what if” premises. Company-specific impacts in the narrative are model-generated possibilities, not observed facts, forecasts or likelihood estimates. This step is not grounded in accepted company evidence.</p></div>
+          <div><h4><span class="label label-human">Reviewer action</span> What to check</h4><p>Keep scenario premises distinct from current-state claims. Edit unsupported company-specific assertions and approve the narratives before they are used in stress testing.</p></div>
+        </div>
+        <p class="stage-note">Fallback mode uses fixed narrative templates marked as mock. A mock narrative is not an LLM result or company research.</p>
+      </article>
+
+      <article class="stage" id="stage-3">
+        <div class="stage-head"><span class="stage-number">03</span><h3>Dimension Screening</h3></div>
+        <p class="stage-summary">Decide which of AURORA’s 15 dimensions receive deeper sub-dimension assessment.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-llm">LLM recommendation</span> What it does</h4><p>Recommends relevance and deep-assessment selections from the company description, industry and size. It is prompted to include all 15 dimensions and usually select 10–13 for deeper review.</p></div>
+          <div><h4><span class="label label-code">Framework</span> What is fixed</h4><p>The dimension catalogue and SaaS materiality descriptions are fixed. If the model is unavailable, default selections come from the hard-coded SaaS materiality table. The user can edit the selection and rationale.</p></div>
+          <div><h4><span class="label label-risk">Assumptions</span> What may vary</h4><p>The model’s “materiality” ranking is qualitative and not calibrated. It may infer importance from generic industry knowledge. The default size notes do not automatically change the scoring thresholds.</p></div>
+          <div><h4><span class="label label-human">Reviewer action</span> What to check</h4><p>Review omitted dimensions carefully; select dimensions based on business exposure, product criticality and regulation, not the model’s confidence. Confirm coverage requirements before approving.</p></div>
+        </div>
+        <div class="callout"><p><strong>Coverage interaction:</strong> the composite now uses every qualifying dimension; no minimum dimension count is imposed. If only a few dimensions are assessed, a composite is still calculated but represents limited coverage, which the report displays beside the score.</p></div>
+      </article>
+
+      <article class="stage" id="stage-4">
+        <div class="stage-head"><span class="stage-number">04</span><h3>Evidence Plan</h3></div>
+        <p class="stage-summary">Decide what records will be sought for each selected dimension or sub-dimension.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-human">Human-authored</span> What happens</h4><p>The user creates, edits and saves the evidence plan. The current implementation has no LLM evidence-plan generation call.</p></div>
+          <div><h4><span class="label label-code">Code behavior</span> What is enforced</h4><p>The API checks that the submitted plan is an array, then saves it. It does not verify that each target is measurable, sufficient, or aligned with the frozen reporting period.</p></div>
+          <div><h4><span class="label label-risk">Assumptions</span> Common gap</h4><p>A broad source target such as “annual report” does not guarantee the report contains the measure, covers the assessment period, or supports a particular criterion.</p></div>
+          <div><h4><span class="label label-human">Reviewer action</span> What to specify</h4><p>For each target, name the required metric, definition, reporting period, acceptable source, sub-dimension, and evidence that would count as a successful test or failure.</p></div>
+        </div>
+      </article>
+
+      <article class="stage" id="stage-5">
+        <div class="stage-head"><span class="stage-number">05</span><h3>Evidence Gathering</h3></div>
+        <p class="stage-summary">Collect records, associate them with sub-dimensions, and have a person decide whether each may be used.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-llm">LLM research proposal</span> What it does</h4><p>When configured, the model is prompted to produce claims, values, quotations, source names, URLs, publication dates and sub-dimension assignments for plan targets. It is told to prefer primary sources, avoid fabrication and skip unsupported targets.</p></div>
+          <div><h4><span class="label label-code">Code behavior</span> What is enforced</h4><p>Returned evidence is stored as <code>proposed</code>; it does not count as accepted until reviewed. Without the LLM, a mock research path can produce illustrative records. Mock evidence must never be treated as company evidence.</p></div>
+          <div><h4><span class="label label-risk">Assumptions</span> What is not verified</h4><p>The research function sends a prompt to the model; it does not itself browse the web or fetch each cited document. A quotation, extracted number, publisher, URL or publication date may be wrong. A URL being present is not proof it resolves to that document.</p></div>
+          <div><h4><span class="label label-human">Reviewer action</span> What to check</h4><p>Open the original source; confirm exact text, value, unit, measurement date, scope, calculation method and sub-dimension. Accept only evidence that actually supports the claim. Reject mock or unverifiable records.</p></div>
+        </div>
+      </article>
+
+      <article class="stage" id="stage-6">
+        <div class="stage-head"><span class="stage-number">06</span><h3>Sub-Dimension Ratings</h3></div>
+        <p class="stage-summary">Review accepted evidence and assign each selected sub-dimension a Level, Position and score.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-human">Manual entry</span> What happens</h4><p>Choose a Level and Position, link accepted evidence, add a brief rationale and reviewer name, then confirm. If evidence does not support a rating, leave the sub-dimension unscored.</p></div>
+          <div><h4><span class="label label-llm">AI suggestions</span> What it does</h4><p>When enabled and accepted non-mock evidence exists, the LLM suggests Level, Position, confidence, rationale and evidence IDs. If it cannot support a rating, it returns no score and the reviewer can enter one manually.</p></div>
+          <div><h4><span class="label label-code">Framework calculation</span> What code checks</h4><p>The application checks that Level and Position form a valid pair and that referenced evidence is accepted and assigned to this sub-dimension. It then calculates the numeric score using the band minimum and Position offset. No eight-item checklist or exact-date gate is required in this simplified flow.</p></div>
+          <div><h4><span class="label label-risk">Where judgment remains</span> What code cannot know</h4><p>The LLM may misinterpret evidence or make an unsupported inference. A valid Level/Position response does not prove a rating is correct. Reviewers should verify source meaning, scope and reporting period; the rubric has not been empirically calibrated.</p></div>
+          <div><h4><span class="label label-human">Human confirmation</span> What to do</h4><p>Accept or edit each AI suggestion, or enter a manual rating. Ratings remain unscored until a named reviewer confirms them. Stage approval requires every selected sub-dimension to have a current reviewed rating or an explicit unscored result.</p></div>
+        </div>
+        <div class="formula"><p>Sub-dimension score = Level band minimum + Position points</p><p>Low +3 · Mid +12 · High +21. The rubric’s Level/Position result is converted by code, not selected as a free-form number by the LLM.</p></div>
+        <p>For example, Level 3 + Mid becomes 51 + 12 = <strong>63/100</strong>. Position is a reviewer judgment within the selected Level. Changing a saved rating invalidates later approvals so dependent calculations can be refreshed.</p>
+      </article>
+
+      <article class="stage" id="stage-7">
+        <div class="stage-head"><span class="stage-number">07</span><h3>Dimension and Composite Scoring</h3></div>
+        <p class="stage-summary">Turn reviewed sub-dimension numbers into dimension and overall scores. This stage is deterministic.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-code">Code only</span> What it calculates</h4><p>Each dimension averages its eligible numeric sub-dimension scores equally. R1 requires at least 2 of 3. Its Level is looked up from the resulting band; maturity levels are not averaged and rounded. The composite equally averages every qualifying dimension. Zero qualifying dimensions means no average can be calculated.</p></div>
+          <div><h4><span class="label label-code">Additional checks</span> What they mean</h4><p>The app reports evidence coverage and an R3 sensitivity comparison between the reported composite and a Full-evidence-only mean. Review readiness requires a calculable composite and no pending or stale reviews; there is no minimum qualifying-dimension count.</p></div>
+          <div><h4><span class="label label-risk">Assumptions</span> Policy, not AI</h4><p>Equal weighting, R1 and R3 are chosen scoring rules, not LLM conclusions or empirically validated predictive rules. Averages can rise when weaker items are missing; sensitivity checks cannot eliminate all missing-data bias. With no overall minimum, very sparse coverage can still produce a composite.</p></div>
+          <div><h4><span class="label label-human">Reviewer action</span> What to check</h4><p>Inspect partial coverage and critical weaknesses beside any mean. Dimension overrides are not allowed; revise the underlying Level/Position ratings instead. When comparing companies, confirm their evidence covers comparable periods.</p></div>
+        </div>
+      </article>
+
+      <article class="stage" id="stage-8">
+        <div class="stage-head"><span class="stage-number">08</span><h3>Scenario Stress Test</h3></div>
+        <p class="stage-summary">Explore how current dimension capability could change if a defined future scenario occurred.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-llm">LLM interpretation</span> What it does</h4><p>If a dimension has a base Level and relevant evidence exists, the model proposes a scenario Level, direction, confidence and rationale. It is given the scenario’s fixed premise and accepted dimension evidence.</p></div>
+          <div><h4><span class="label label-code">Code / mock fallback</span> What is enforced</h4><p>Code bounds the returned Level to 1–4 and recalculates direction from the returned Level versus base. If the model is unavailable or errors, a hard-coded scenario-by-dimension shift map supplies a heuristic result; results are marked mock. No base Level means no scenario score.</p></div>
+          <div><h4><span class="label label-risk">Assumptions</span> What it is not</h4><p>A scenario Level is a judgment under a hypothetical premise, not a forecast, probability, simulation or newly measured capability. Model reasoning can extrapolate beyond evidence. The fallback shift map encodes fixed assumptions such as “budget pressure weakens liquidity.”</p></div>
+          <div><h4><span class="label label-human">Reviewer action</span> What to check</h4><p>Check each change against both scenario conditions and evidence. Challenge generic or unsupported changes. Record a reason for edits and approve the scenario result before relying on it.</p></div>
+        </div>
+      </article>
+
+      <article class="stage" id="stage-9">
+        <div class="stage-head"><span class="stage-number">09</span><h3>Resilience Gaps</h3></div>
+        <p class="stage-summary">Translate base and scenario results into Strong, Conditional or Exposed classifications and leadership-level gap descriptions.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-code">Code only</span> What it does</h4><p>Fixed rules classify dimensions from base and available scenario Levels. Templates produce gap text, implications, recommendations and early-warning indicators. This stage does not call the LLM.</p></div>
+          <div><h4><span class="label label-code">Framework rules</span> Classification</h4><p>Strong requires base Level at least 3 and all available scenario Levels at least 3; Conditional means some are below 3; Exposed includes base below 3 or all scenarios below 3. A low base score also generates a base gap when no weakening scenario is recorded.</p></div>
+          <div><h4><span class="label label-risk">Assumptions / caveat</span> What to watch</h4><p>Template language is generalized. Current classification uses the scenario results that exist; it does not require a complete set of four before classifying. Missing scenarios can therefore make the output look more complete than it is. “No gap generated” does not mean no risk exists.</p></div>
+          <div><h4><span class="label label-human">Reviewer action</span> What to check</h4><p>Check that all four scenarios were assessed and approved. Ensure each gap links to relevant evidence and that classifications reflect missing-data limitations. Recommendations are leadership prompts, not company-specific implementation plans.</p></div>
+        </div>
+      </article>
+
+      <article class="stage" id="stage-10">
+        <div class="stage-head"><span class="stage-number">10</span><h3>Final Assessment and Report</h3></div>
+        <p class="stage-summary">Present the assembled assessment, source trail, readiness checks and sub-dimension explanations.</p>
+        <div class="stage-grid">
+          <div><h4><span class="label label-code">Code / presentation</span> What happens</h4><p>The dashboard renders saved profiles, direct Level/Position ratings, formula-derived dimensions, scenario results, classifications, alerts, gaps, evidence and audit trail. Readiness blockers and export content are computed from saved data.</p></div>
+          <div><h4><span class="label label-llm">No new LLM judgment</span></h4><p>Opening or printing the final report does not ask a new model to rescore, reclassify or validate the assessment. It displays prior outputs and computed rules.</p></div>
+          <div><h4><span class="label label-risk">Interpretation</span></h4><p>The scores are framework-based capability indicators, not probabilities of resilience or proof of future outcomes. This provisional rubric has not yet been calibrated against disruption and recovery data.</p></div>
+          <div><h4><span class="label label-human">Final responsibility</span></h4><p>Confirm sources, periods, rubric version, review identities, coverage, mock markers, endpoint exceptions and scenario completeness before presenting conclusions.</p></div>
+        </div>
+      </article>
+    </section>
+
+    <section id="scoring" aria-labelledby="scoring-title">
+      <h2 id="scoring-title">How the Framework Converts Findings to Scores</h2>
+      <div class="callout">
+        <p><strong>The scoring flow is intentionally simple:</strong> accepted evidence → optional AI suggestion → reviewer accepts, edits or enters Level + Position → application calculates the score. A separate Criterion Policy freeze is not required for new ratings.</p>
+      </div>
+      <div class="table-wrap" role="region" aria-label="Rating method options" tabindex="0">
+        <table>
+          <caption>How ratings are supplied</caption>
+          <thead><tr><th scope="col">Mode</th><th scope="col">What happens</th><th scope="col">What the reviewer does</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">AI suggestions</th><td>The model proposes Level, Position, confidence, rationale and IDs for accepted evidence when it can support a rating.</td><td>Accept or edit the proposal; confirm it before it counts.</td></tr>
+            <tr><th scope="row">Manual entry</th><td>Skip AI and enter Level, Position, supporting evidence and a brief rationale.</td><td>Confirm the rating, or leave it unscored when evidence is insufficient.</td></tr>
+            <tr><th scope="row">No usable suggestion</th><td>The app leaves the rating unscored and explains why evidence or AI output did not support a proposal.</td><td>Enter a defensible rating manually, gather better evidence or leave it unscored.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>What remains deterministic</h3>
+      <p>The LLM does not choose the final numeric score or perform dimension/composite arithmetic. The reviewer chooses or confirms Level and Position; code maps the pair to a score. The application retains a small guardrail that a scored rating links to accepted evidence and has a named reviewer. It does not require exact-quote matching, an observation-date window or eight separate criterion findings.</p>
+      <div class="table-wrap" role="region" aria-label="Direct rating score conversion" tabindex="0">
+        <table>
+          <caption>Score conversion and aggregation</caption>
+          <thead><tr><th scope="col">Calculation</th><th scope="col">Rule</th><th scope="col">Example</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Sub-dimension</th><td>Level band minimum + Position points</td><td>Level 3 + Mid = 51 + 12 = 63</td></tr>
+            <tr><th scope="row">Dimension</th><td>Equal average; at least 2 of 3 ratings</td><td>(63 + 47 + 38) / 3 = 49.3</td></tr>
+            <tr><th scope="row">Composite</th><td>Equal average of every qualifying dimension</td><td>No qualifying dimensions means no composite; sparse coverage is shown alongside a calculated score</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="formula"><p>Dimension = equal average of eligible sub-dimension numeric scores (at least 2 of 3).</p><p>Composite = equal average of all qualifying dimensions. No minimum count is imposed; no qualifying dimensions means there is no average to report. Score bands determine Level; no maturity-level rounding is performed.</p></div>
+      <p>More detail: <a href="scoring-engine.md">current scoring engine documentation</a> and <a href="../src/lib/framework/scoring.ts">score calculations</a>.</p>
+    </section>
+
+    <section id="assumptions" aria-labelledby="assumptions-title">
+      <h2 id="assumptions-title">Where Assumptions Enter</h2>
+      <div class="table-wrap" role="region" aria-label="Assumptions and controls" tabindex="0">
+        <table>
+          <caption>Interpretations that should not be confused with verified facts</caption>
+          <thead><tr><th scope="col">Source</th><th scope="col">Possible assumption</th><th scope="col">Current control</th><th scope="col">Remaining risk</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Model prior knowledge</th><td>Company details, current metrics, named sources or URLs recalled or inferred by the LLM.</td><td>Discovery/research outputs begin proposed; user accepts evidence separately.</td><td>No live web retrieval in the LLM client; users must open and verify sources.</td></tr>
+            <tr><th scope="row">Scenario narratives</th><td>Company-specific consequences under hypothetical AI/macro futures.</td><td>Four scenario premises are fixed and require human approval.</td><td>Narratives are not probability-weighted or evidence-backed forecasts.</td></tr>
+            <tr><th scope="row">Dimension relevance</th><td>Which capabilities matter more to a company from its industry/size description.</td><td>All 15 dimensions remain in the catalogue; user can edit selections.</td><td>Recommendation is qualitative and can miss a critical exposure.</td></tr>
+            <tr><th scope="row">Rating judgment</th><td>How evidence supports a Level and within-Level Position.</td><td>AI suggestion or manual entry, linked accepted evidence and reviewer confirmation.</td><td>The model can misinterpret evidence; the reviewer remains responsible for judgment.</td></tr>
+            <tr><th scope="row">LLM unavailable</th><td>Mock profile/evidence, default dimension choices, scenario templates or fixed scenario shifts may appear.</td><td>Some records carry mock flags and default paths are documented.</td><td>Mock output can resemble a real result; never use it as company evidence.</td></tr>
+            <tr><th scope="row">Score design</th><td>Band boundaries, offsets, equal dimension weights, R1 and R3 encode chosen norms.</td><td>Deterministic calculations and coverage reporting.</td><td>Reproducible arithmetic does not mean empirically calibrated scoring.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout callout-risk"><p><strong>Do not alter source dates or claims to improve a rating.</strong> Record source publication and measurement dates as reported. When evidence periods differ across companies, disclose that limitation rather than implying a like-for-like comparison.</p></div>
+    </section>
+
+    <section id="controls" aria-labelledby="controls-title">
+      <h2 id="controls-title">Reviewer Checklist</h2>
+      <ul>
+        <li>Confirm the company profile, size classification, critical-service profile and reporting dates from independent information.</li>
+        <li>Open sources yourself. Verify document identity, URL, exact excerpt, publication date, measurement period, unit and sub-dimension.</li>
+        <li>Keep “unknown” when evidence is missing or ambiguous. Do not turn nondisclosure into a failure or a success.</li>
+        <li>For Stage 6, confirm the AI suggestion or manual Level/Position, rationale and linked accepted evidence. Leave unsupported ratings unscored.</li>
+        <li>Distinguish scored data from proposed, mock, pending, stale or endpoint-override records.</li>
+        <li>Check all 15 dimensions, sub-dimension coverage, the four critical dimensions, all four scenarios, and the reasons behind exclusions.</li>
+        <li>Record reviewer identity and rationale. Keep scenario assumptions visibly separate from observed company facts.</li>
+        <li>Describe the result as a provisional framework-based assessment, not as a validated resilience probability, credit rating or investment recommendation.</li>
+      </ul>
+      <p>Workflow approvals are checkpoints for human review. Navigating backward to read a prior page does not itself make an LLM output verified; editing inputs can invalidate later approvals.</p>
+    </section>
+
+    <footer>
+      <p><strong>Implementation references:</strong> <a href="../src/lib/llm/">LLM modules</a> · <a href="../src/lib/framework/criteria.ts">criteria</a> · <a href="../src/lib/framework/scoring.ts">score calculations</a> · <a href="../src/lib/framework/resilience.ts">classification and gap rules</a> · <a href="workflow.md">workflow notes</a>.</p>
+      <p>This guide describes code behavior and its limitations; it is not a substitute for source verification, reviewer judgment or rubric calibration.</p>
+    </footer>
+  </main>
+</body>
+</html>

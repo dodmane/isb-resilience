@@ -24,9 +24,12 @@ import {
   addAuditEntry,
   getAuditTrail,
   invalidateApprovalsAfterStage,
+  upsertSubdivisionScore,
 } from '@/lib/db/store';
 import { type Assessment, type StageApproval, type AssessmentStage } from '@/types/assessment';
 import { type Evidence } from '@/types/evidence';
+import { type SubdivisionScore } from '@/types/scoring';
+import { evidenceSnapshot } from '@/lib/framework/criteria';
 
 describe('Store & Evidence', () => {
   const testAssessmentId = uuidv4();
@@ -212,6 +215,58 @@ describe('Store & Evidence', () => {
       upsertStageApproval(approval);
       const result = getStageApprovals(testAssessmentId);
       expect(result.find((a) => a.stage === 1)?.status).toBe('approved');
+    });
+
+    it('should keep direct-rating approvals current without a criteria policy', () => {
+      const directAssessmentId = uuidv4();
+      const now = new Date().toISOString();
+      createAssessment({
+        id: directAssessmentId,
+        companyName: 'Direct Rating Co',
+        companyDescription: '',
+        industry: '',
+        companySize: null,
+        dataSourceMode: 'public',
+        currentStage: 6,
+        assessmentLens: 'SaaS/IT',
+        scenarioNarratives: {},
+        dimensionSelections: [],
+        evidencePlan: [],
+        scoringMethod: 'manual',
+        createdAt: now,
+        updatedAt: now,
+      });
+      upsertSubdivisionScore({
+        id: uuidv4(),
+        assessmentId: directAssessmentId,
+        dimensionKey: 'liquidity_runway',
+        subdivisionKey: 'cash_runway',
+        maturityLevel: null,
+        position: null,
+        ratingMethod: 'level_position',
+        normalizedScore: null,
+        confidence: 'medium',
+        status: 'insufficient_evidence',
+        rationale: 'Reviewed and explicitly left unscored',
+        overrideReason: null,
+        evidenceIds: [],
+        evidenceSnapshot: evidenceSnapshot([]),
+        isMockRecommendation: false,
+        reviewedAt: now,
+        reviewedBy: 'Reviewer',
+        createdAt: now,
+        updatedAt: now,
+      } satisfies SubdivisionScore);
+      upsertStageApproval({
+        id: uuidv4(),
+        assessmentId: directAssessmentId,
+        stage: 6,
+        status: 'approved',
+        approvedAt: now,
+        notes: '',
+      });
+
+      expect(getStageApprovals(directAssessmentId).find(approval => approval.stage === 6)?.status).toBe('approved');
     });
 
     it('should invalidate approvals after a rejected stage', () => {

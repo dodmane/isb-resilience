@@ -1,4 +1,6 @@
-import { recommendSubdivisionScore, assessConfidence, aggregateConfidence } from '@/lib/llm/scoring-recommendation';
+import { recommendSubdivisionScore, recommendSubdivisionScoreAsync, assessConfidence, aggregateConfidence } from '@/lib/llm/scoring-recommendation';
+import { recommendSubdivisionRatingAsync } from '@/lib/llm/rating-recommendation';
+import { type ScoringPolicy } from '@/lib/framework/criteria';
 import { type Evidence } from '@/types/evidence';
 
 function makeEvidence(overrides: Partial<Evidence> = {}): Evidence {
@@ -28,6 +30,34 @@ function makeEvidence(overrides: Partial<Evidence> = {}): Evidence {
 }
 
 describe('Scoring Recommendation', () => {
+  it('leaves a direct Level/Position rating unscored when accepted evidence is absent', async () => {
+    const result = await recommendSubdivisionRatingAsync('revenue_durability', 'retention_nrr', []);
+
+    expect(result.status).toBe('insufficient_evidence');
+    expect(result.maturityLevel).toBeNull();
+    expect(result.position).toBeNull();
+    expect(result.evidenceIds).toEqual([]);
+    expect(result.rationale).toContain('No accepted evidence');
+  });
+
+  describe('recommendSubdivisionScoreAsync', () => {
+    it('returns all eight criteria for manual follow-up when accepted evidence is absent', async () => {
+      const policy: ScoringPolicy = {
+        rubricVersion: 'saas-criteria-1.0', profile: 'standard', reviewMode: 'llm_assisted',
+        periodStart: '2025-01-01', periodEnd: '2025-12-31',
+        approvedAt: '2026-01-01T00:00:00.000Z', approvalReason: 'Test policy',
+      };
+      const result = await recommendSubdivisionScoreAsync('revenue_durability', 'retention_nrr', [], policy);
+
+      expect(result.criteria).toHaveLength(8);
+      expect(result.criteria?.every(finding => finding.status === 'unknown')).toBe(true);
+      expect(result.extractionIssue?.criterionIds).toHaveLength(8);
+      expect(result.extractionIssue?.message).toContain('No accepted, non-mock evidence');
+      expect(result.isFallback).toBe(true);
+      expect(result.maturityLevel).toBeNull();
+    });
+  });
+
   describe('recommendSubdivisionScore', () => {
     it('should return NOT SCORED when no accepted evidence', () => {
       const result = recommendSubdivisionScore('revenue_durability', 'retention_nrr', []);
@@ -50,15 +80,16 @@ describe('Scoring Recommendation', () => {
       expect(result.status).toBe('insufficient_evidence');
     });
 
-    it('should score when accepted evidence exists', () => {
+    it('should leave capability unscored when only fallback source-quality analysis is available', () => {
       const evidence = [makeEvidence()];
       const result = recommendSubdivisionScore('revenue_durability', 'retention_nrr', evidence);
-      expect(result.maturityLevel).not.toBeNull();
-      expect(result.status).toBe('scored');
-      expect([1, 2, 3, 4]).toContain(result.maturityLevel);
+      expect(result.maturityLevel).toBeNull();
+      expect(result.position).toBeNull();
+      expect(result.status).toBe('insufficient_evidence');
+      expect(result.isFallback).toBe(true);
     });
 
-    it('should score higher with more and better evidence', () => {
+    it('should not infer capability maturity from more or better sources', () => {
       const weak = [makeEvidence({ sourceType: 'other', sourceUrl: null, urlResolved: false })];
       const strong = [
         makeEvidence(),
@@ -69,7 +100,8 @@ describe('Scoring Recommendation', () => {
       const weakResult = recommendSubdivisionScore('d', 's', weak);
       const strongResult = recommendSubdivisionScore('d', 's', strong);
 
-      expect(strongResult.maturityLevel!).toBeGreaterThanOrEqual(weakResult.maturityLevel!);
+      expect(strongResult.maturityLevel).toBeNull();
+      expect(weakResult.maturityLevel).toBeNull();
     });
 
     it('should return maturity level between 1 and 4', () => {

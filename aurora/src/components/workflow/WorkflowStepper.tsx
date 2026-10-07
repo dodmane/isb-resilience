@@ -6,16 +6,17 @@ import { CheckCircle2, Circle, Lock } from 'lucide-react';
 
 interface WorkflowStepperProps {
   currentStage: AssessmentStage;
+  viewedStage?: AssessmentStage;
   approvals: { stage: AssessmentStage; status: ApprovalStatus }[];
   onStageClick?: (stage: AssessmentStage) => void;
 }
 
-export function WorkflowStepper({ currentStage, approvals, onStageClick }: WorkflowStepperProps) {
+export function WorkflowStepper({ currentStage, viewedStage = currentStage, approvals, onStageClick }: WorkflowStepperProps) {
   const stages = Object.entries(STAGE_LABELS).map(([key, label]) => {
     const stage = Number(key) as AssessmentStage;
     const approval = approvals.find((a) => a.stage === stage);
     const isApproved = approval?.status === 'approved';
-    const isCurrent = stage === currentStage;
+    const isCurrent = stage === viewedStage;
     const isAccessible = stage <= currentStage;
     const isLocked = stage > currentStage;
 
@@ -28,6 +29,10 @@ export function WorkflowStepper({ currentStage, approvals, onStageClick }: Workf
         {stages.map((s, i) => (
           <div key={s.stage} className="flex items-center">
             <button
+              type="button"
+              aria-label={`Stage ${s.stage}: ${s.label}`}
+              aria-current={s.isCurrent ? 'step' : undefined}
+              title={s.label}
               onClick={() => s.isAccessible && onStageClick?.(s.stage)}
               disabled={s.isLocked}
               className={cn(

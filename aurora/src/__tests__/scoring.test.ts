@@ -3,23 +3,23 @@ import { type MaturityLevel } from '@/types/assessment';
 
 describe('Scoring Engine', () => {
   describe('normalize', () => {
-    it('should return midpoint of Level 1 range', () => {
-      const result = normalize(1);
-      expect(result).toBeGreaterThanOrEqual(25);
-      expect(result).toBeLessThanOrEqual(40);
-      expect(result).toBe(33);
+    it('should add Mid position points to the Level 1 minimum', () => {
+      const result = normalize(1, 'Mid');
+      expect(result).toBeGreaterThanOrEqual(0);
+      expect(result).toBeLessThanOrEqual(25);
+      expect(result).toBe(12);
     });
 
-    it('should return midpoint of Level 4 range', () => {
-      const result = normalize(4);
-      expect(result).toBeGreaterThanOrEqual(90);
+    it('should add Mid position points to the Level 4 minimum', () => {
+      const result = normalize(4, 'Mid');
+      expect(result).toBeGreaterThanOrEqual(76);
       expect(result).toBeLessThanOrEqual(100);
-      expect(result).toBe(95);
+      expect(result).toBe(88);
     });
 
     it('should return values within defined ranges for all levels', () => {
       for (const level of [1, 2, 3, 4] as MaturityLevel[]) {
-        const result = normalize(level);
+        const result = normalize(level, 'Mid');
         const [low, high] = NORMALIZATION_RANGES[level];
         expect(result).toBeGreaterThanOrEqual(low);
         expect(result).toBeLessThanOrEqual(high);
@@ -36,16 +36,16 @@ describe('Scoring Engine', () => {
       expect(calculateDimensionMaturity([2, 3, 3])).toBe(3);
     });
 
-    it('should round to nearest integer', () => {
+    it('should look up the band of Mid-position numeric averages', () => {
       expect(calculateDimensionMaturity([1, 2, 2])).toBe(2);
     });
 
     it('should handle partial scoring', () => {
-      expect(calculateDimensionMaturity([3, null, 4])).toBe(4);
+      expect(calculateDimensionMaturity([3, null, 4])).toBe(3);
     });
 
-    it('should return the single score when only one is provided', () => {
-      expect(calculateDimensionMaturity([2, null, null])).toBe(2);
+    it('should exclude dimensions with only one scored subdivision', () => {
+      expect(calculateDimensionMaturity([2, null, null])).toBeNull();
     });
   });
 
