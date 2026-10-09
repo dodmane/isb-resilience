@@ -48,6 +48,7 @@ export interface Assessment {
   evidencePlan: EvidencePlanItem[];
   scoringMethod?: ScoringMethod;
   scoringPolicy?: ScoringPolicy;
+  discoveryIsMock?: boolean;
   createdAt: string;
   updatedAt: string;
 }

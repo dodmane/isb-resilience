@@ -1,4 +1,4 @@
-import { getLLMRuntimeSettings, LLM_PROVIDER } from './settings';
+import { getLLMRuntimeSettings } from './settings';
 
 export function isLLMConfigured(): boolean {
   return Boolean(getLLMRuntimeSettings().apiKey);
@@ -13,9 +13,7 @@ export async function callLLM(systemPrompt: string, userPrompt: string): Promise
   if (!settings.apiKey) {
     throw new Error('LLM not configured — enter an API key in LLM settings or set ANTHROPIC_API_KEY');
   }
-  if (settings.provider !== LLM_PROVIDER) throw new Error(`Unsupported LLM provider: ${settings.provider}`);
-
-  const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
+  const baseUrl = settings.baseUrl;
   const response = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {
@@ -32,8 +30,10 @@ export async function callLLM(systemPrompt: string, userPrompt: string): Promise
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    console.error('LLM API error:', response.status, err);
+    console.error('LLM API error:', response.status);
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`LLM API authentication failed (${response.status}). Verify that the API key or proxy token is valid for the configured base URL.`);
+    }
     throw new Error(`LLM API error: ${response.status}`);
   }
 

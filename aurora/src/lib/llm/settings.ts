@@ -3,12 +3,15 @@ import path from 'node:path';
 
 const DATA_DIRECTORY = path.join(process.cwd(), '.aurora-data');
 const SETTINGS_PATH = path.join(DATA_DIRECTORY, 'llm-settings.json');
-const SUPPORTED_PROVIDER = 'anthropic';
+const DEFAULT_PROVIDER = 'anthropic';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_BASE_URL = 'https://api.anthropic.com';
 
 interface SavedLLMSettings {
   apiKey: string;
   apiKeyOverride: boolean;
+  baseUrl?: string;
+  baseUrlOverride?: boolean;
   model: string;
   modelOverride?: boolean;
   provider: string;
@@ -18,6 +21,7 @@ interface SavedLLMSettings {
 export interface LLMSettingsInput {
   apiKey?: string;
   clearApiKey?: boolean;
+  baseUrl: string;
   model: string;
   provider: string;
 }
@@ -35,14 +39,15 @@ export function getLLMRuntimeSettings() {
   const saved = readSavedSettings();
   return {
     apiKey: saved?.apiKeyOverride ? saved.apiKey : process.env.ANTHROPIC_API_KEY || '',
+    baseUrl: saved?.baseUrlOverride === false ? process.env.ANTHROPIC_BASE_URL || DEFAULT_BASE_URL : saved?.baseUrl || process.env.ANTHROPIC_BASE_URL || DEFAULT_BASE_URL,
     model: saved?.modelOverride === false ? process.env.CLAUDE_MODEL || DEFAULT_MODEL : saved?.model || process.env.CLAUDE_MODEL || DEFAULT_MODEL,
-    provider: saved?.providerOverride === false ? process.env.LLM_PROVIDER || SUPPORTED_PROVIDER : saved?.provider || process.env.LLM_PROVIDER || SUPPORTED_PROVIDER,
+    provider: saved?.providerOverride === false ? process.env.LLM_PROVIDER || DEFAULT_PROVIDER : saved?.provider || process.env.LLM_PROVIDER || DEFAULT_PROVIDER,
   };
 }
 
 export function getLLMSettingsSummary() {
   const settings = getLLMRuntimeSettings();
-  return { model: settings.model, provider: settings.provider, apiKeyConfigured: Boolean(settings.apiKey) };
+  return { baseUrl: settings.baseUrl, model: settings.model, provider: settings.provider, apiKeyConfigured: Boolean(settings.apiKey) };
 }
 
 export function saveLLMSettings(input: LLMSettingsInput) {
@@ -52,6 +57,8 @@ export function saveLLMSettings(input: LLMSettingsInput) {
   const next: SavedLLMSettings = {
     apiKey: input.clearApiKey ? '' : suppliedApiKey || current?.apiKey || '',
     apiKeyOverride,
+    baseUrl: input.baseUrl.trim().replace(/\/+$/, ''),
+    baseUrlOverride: true,
     model: input.model.trim(),
     modelOverride: true,
     provider: input.provider,
@@ -69,6 +76,8 @@ export function clearLLMSettings() {
   const reset: SavedLLMSettings = {
     apiKey: '',
     apiKeyOverride: true,
+    baseUrl: '',
+    baseUrlOverride: false,
     model: '',
     modelOverride: false,
     provider: '',
@@ -81,5 +90,4 @@ export function clearLLMSettings() {
   return getLLMSettingsSummary();
 }
 
-export const LLM_PROVIDER = SUPPORTED_PROVIDER;
 export const LLM_DEFAULT_MODEL = DEFAULT_MODEL;

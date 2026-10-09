@@ -47,6 +47,7 @@ export function CompanyDiscoveryStage({
 
   const stage1Approval = approvals.find((a) => a.stage === 1);
   const isApproved = stage1Approval?.status === 'approved';
+  const usedDiscoveryFallback = assessment.discoveryIsMock ?? evidence.some(item => item.isMock);
 
   async function runDiscovery() {
     setDiscovering(true);
@@ -164,11 +165,11 @@ export function CompanyDiscoveryStage({
             </div>
           </div>
 
-          {discovered && (assessment.companyDescription?.includes('mock') || evidence.some(e => e.isMock)) && (
+          {discovered && usedDiscoveryFallback && (
               <div className="flex items-center gap-2 text-xs text-amber-600">
                 <FlaskConical className="h-3.5 w-3.5" />
                 <span>
-                  Some results from heuristic fallback — real AI research is available when LLM is configured.
+                  Some results used heuristic fallback. If unexpected, check that the API key or proxy token is valid for the configured base URL.
                 </span>
               </div>
           )}

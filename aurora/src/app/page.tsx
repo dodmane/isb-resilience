@@ -18,6 +18,7 @@ export default function HomePage() {
   const [dataSourceMode, setDataSourceMode] = useState<DataSourceMode>('public');
   const [creating, setCreating] = useState(false);
   const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmBaseUrl, setLlmBaseUrl] = useState('https://api.anthropic.com');
   const [llmModel, setLlmModel] = useState('claude-sonnet-4-6');
   const [llmProvider, setLlmProvider] = useState('anthropic');
   const [llmKeyConfigured, setLlmKeyConfigured] = useState(false);
@@ -44,6 +45,7 @@ export default function HomePage() {
       .then(settings => {
         setLlmModel(settings.model);
         setLlmProvider(settings.provider);
+        setLlmBaseUrl(settings.baseUrl);
         setLlmKeyConfigured(settings.apiKeyConfigured);
       })
       .catch(error => setLlmSettingsError(error.message));
@@ -61,6 +63,7 @@ export default function HomePage() {
         body: JSON.stringify({
           apiKey: llmApiKey,
           clearApiKey: clearLlmKey,
+          baseUrl: llmBaseUrl,
           model: llmModel,
           provider: llmProvider,
         }),
@@ -69,6 +72,7 @@ export default function HomePage() {
       if (!response.ok) throw new Error(settings.error || 'Could not save LLM settings.');
       setLlmApiKey('');
       setClearLlmKey(false);
+      setLlmBaseUrl(settings.baseUrl);
       setLlmKeyConfigured(settings.apiKeyConfigured);
       setLlmSettingsMessage('LLM settings saved and active.');
     } catch (error) {
@@ -79,7 +83,7 @@ export default function HomePage() {
   }
 
   async function resetLlmSettings() {
-    if (!confirm('Clear the saved API key and reset the model and provider to environment defaults? The API key configured in this app will be removed.')) return;
+    if (!confirm('Clear the saved API key and reset the base URL, model, and provider to environment defaults? The API key configured in this app will be removed.')) return;
     setResettingLlmSettings(true);
     setLlmSettingsMessage('');
     setLlmSettingsError('');
@@ -89,10 +93,11 @@ export default function HomePage() {
       if (!response.ok) throw new Error(settings.error || 'Could not clear LLM settings.');
       setLlmApiKey('');
       setClearLlmKey(false);
+      setLlmBaseUrl(settings.baseUrl);
       setLlmModel(settings.model);
       setLlmProvider(settings.provider);
       setLlmKeyConfigured(settings.apiKeyConfigured);
-      setLlmSettingsMessage('Saved key cleared; model and provider reset to environment defaults.');
+      setLlmSettingsMessage('Saved key cleared; base URL, model, and provider reset to environment defaults.');
     } catch (error) {
       setLlmSettingsError(error instanceof Error ? error.message : 'Could not clear LLM settings.');
     } finally {
@@ -255,10 +260,9 @@ export default function HomePage() {
             <form onSubmit={saveLlmSettings} className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="llm-provider">LLM_PROVIDER</Label>
-                <select id="llm-provider" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={llmProvider} onChange={event => setLlmProvider(event.target.value)}>
-                  <option value="anthropic">Anthropic</option>
-                </select>
+                <Input id="llm-provider" value={llmProvider} onChange={event => setLlmProvider(event.target.value)}
+                  placeholder="anthropic" required maxLength={100}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="claude-model">CLAUDE_MODEL</Label>
@@ -266,11 +270,18 @@ export default function HomePage() {
                   placeholder="claude-sonnet-4-6" required maxLength={160} />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="anthropic-api-key">ANTHROPIC_API_KEY</Label>
+                <Label htmlFor="anthropic-base-url">ANTHROPIC_BASE_URL</Label>
+                <Input id="anthropic-base-url" type="url" value={llmBaseUrl}
+                  onChange={event => setLlmBaseUrl(event.target.value)}
+                  placeholder="https://api.anthropic.com" required maxLength={2048} />
+                <p className="text-xs text-muted-foreground">Any HTTP(S) base URL is accepted. The endpoint must implement the Anthropic Messages API; AURORA appends /v1/messages.</p>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="anthropic-api-key">ANTHROPIC_API_KEY / proxy token</Label>
                 <Input id="anthropic-api-key" type="password" autoComplete="new-password" value={llmApiKey}
                   onChange={event => { setLlmApiKey(event.target.value); setClearLlmKey(false); }}
-                  placeholder={llmKeyConfigured ? 'Key configured; leave blank to keep it' : 'Paste an Anthropic API key'} />
-                <p className="text-xs text-muted-foreground">{llmKeyConfigured ? 'An API key is configured.' : 'No API key is configured.'} Settings apply immediately to all users of this instance.</p>
+                  placeholder={llmKeyConfigured ? 'Key configured; leave blank to keep it' : 'Paste an API key or proxy token'} />
+                <p className="text-xs text-muted-foreground">{llmKeyConfigured ? 'An API key or proxy token is configured.' : 'No API key or proxy token is configured.'} For a custom gateway, use a token issued by that gateway. Settings apply immediately to all users of this instance.</p>
               </div>
               {llmKeyConfigured && (
                 <label className="flex items-center gap-2 text-sm md:col-span-2">

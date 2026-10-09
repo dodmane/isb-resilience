@@ -28,6 +28,7 @@ export async function POST(
     companyDescription: result.profile.companyDescription,
     industry: result.profile.industry,
     companySize: result.profile.companySize,
+    discoveryIsMock: result.profile.isMock,
   });
 
   for (const ev of result.evidence) {
@@ -42,7 +43,7 @@ export async function POST(
     entityId: id,
     oldValue: null,
     newValue: { profile: result.profile, evidenceCount: result.evidence.length },
-    reason: 'Company discovery completed via mock AI',
+    reason: result.profile.isMock ? 'Company discovery used heuristic fallback' : 'Company discovery completed via LLM',
     actor: 'system',
     timestamp: new Date().toISOString(),
   });

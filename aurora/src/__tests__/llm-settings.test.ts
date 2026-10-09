@@ -6,6 +6,7 @@ const originalDirectory = process.cwd();
 const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), 'aurora-llm-settings-'));
 const originalEnvironment = {
   apiKey: process.env.ANTHROPIC_API_KEY,
+  baseUrl: process.env.ANTHROPIC_BASE_URL,
   model: process.env.CLAUDE_MODEL,
   provider: process.env.LLM_PROVIDER,
 };
@@ -23,6 +24,8 @@ describe('LLM settings overrides', () => {
     rmSync(temporaryDirectory, { recursive: true, force: true });
     if (originalEnvironment.apiKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = originalEnvironment.apiKey;
+    if (originalEnvironment.baseUrl === undefined) delete process.env.ANTHROPIC_BASE_URL;
+    else process.env.ANTHROPIC_BASE_URL = originalEnvironment.baseUrl;
     if (originalEnvironment.model === undefined) delete process.env.CLAUDE_MODEL;
     else process.env.CLAUDE_MODEL = originalEnvironment.model;
     if (originalEnvironment.provider === undefined) delete process.env.LLM_PROVIDER;
@@ -31,22 +34,25 @@ describe('LLM settings overrides', () => {
 
   it('saves replacements and clears the saved key while restoring model/provider defaults', () => {
     process.env.ANTHROPIC_API_KEY = 'environment-key';
+    process.env.ANTHROPIC_BASE_URL = 'https://env.example.com';
     process.env.CLAUDE_MODEL = 'environment-model';
-    process.env.LLM_PROVIDER = 'anthropic';
+    process.env.LLM_PROVIDER = 'environment-provider';
 
     settings.saveLLMSettings({
       apiKey: 'saved-key',
+      baseUrl: 'https://custom.example.com/',
       model: 'replacement-model',
-      provider: 'anthropic',
+      provider: 'custom-gateway',
     });
     expect(settings.getLLMRuntimeSettings()).toEqual({
       apiKey: 'saved-key',
+      baseUrl: 'https://custom.example.com',
       model: 'replacement-model',
-      provider: 'anthropic',
+      provider: 'custom-gateway',
     });
 
     const cleared = settings.clearLLMSettings();
-    expect(cleared).toEqual({ model: 'environment-model', provider: 'anthropic', apiKeyConfigured: false });
+    expect(cleared).toEqual({ baseUrl: 'https://env.example.com', model: 'environment-model', provider: 'environment-provider', apiKeyConfigured: false });
     expect(settings.getLLMRuntimeSettings().apiKey).toBe('');
   });
 });
