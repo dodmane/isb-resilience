@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewCheckpoint } from '@/components/assessment/ReviewCheckpoint';
@@ -20,7 +21,7 @@ import { type Evidence } from '@/types/evidence';
 import { type SubdivisionScore } from '@/types/scoring';
 import { type AuditEntry } from '@/types/audit';
 import {
-  FlaskConical, ChevronDown, ChevronRight, AlertTriangle, Edit3,
+  FlaskConical, ChevronDown, ChevronRight, AlertTriangle, Edit3, CheckCircle2, Clock3, RotateCcw,
 } from 'lucide-react';
 
 interface Props {
@@ -89,6 +90,15 @@ export function SubdivisionScoringStage({
 
   function getSubScore(dimKey: string, subKey: string): SubdivisionScore | undefined {
     return subdivisionScores.find(s => s.dimensionKey === dimKey && s.subdivisionKey === subKey);
+  }
+
+  function getReviewState(score?: SubdivisionScore) {
+    if (score?.status === 'stale') return { label: 'Re-review required', state: 'stale' as const };
+    if (!score || score.status === 'needs_review' || !score.reviewedAt || !score.reviewedBy) {
+      return { label: 'Pending confirmation', state: 'pending' as const };
+    }
+    if (score.status === 'insufficient_evidence') return { label: 'Confirmed · unscored', state: 'unscored' as const };
+    return { label: 'Confirmed', state: 'confirmed' as const };
   }
 
   function getSubEvidence(dimKey: string, subKey: string): Evidence[] {
@@ -167,6 +177,10 @@ export function SubdivisionScoringStage({
           {deepDimensions.map(dim => {
             const subs = SUBDIVISIONS[dim.key as DimensionKey];
             const isExpanded = expandedDim === dim.key;
+            const confirmedCount = subs.filter(sub => {
+              const state = getReviewState(getSubScore(dim.key, sub.key)).state;
+              return state === 'confirmed' || state === 'unscored';
+            }).length;
 
             return (
               <Card key={dim.key}>
@@ -182,6 +196,7 @@ export function SubdivisionScoringStage({
                       <CardTitle className="text-sm">
                         <span className="text-muted-foreground">{dim.number}.</span> {dim.name}
                       </CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">{confirmedCount} of {subs.length} ratings confirmed</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {subs.map(sub => {
@@ -202,6 +217,13 @@ export function SubdivisionScoringStage({
                       const score = getSubScore(dim.key, sub.key);
                       const subEvidence = getSubEvidence(dim.key, sub.key);
                       const isOverriding = overrideTarget?.dim === dim.key && overrideTarget?.sub === sub.key;
+                      const reviewState = getReviewState(score);
+                      const reviewStateStyles = {
+                        confirmed: 'text-emerald-700 border-emerald-300 dark:text-emerald-300 dark:border-emerald-800',
+                        unscored: 'text-emerald-700 border-emerald-300 dark:text-emerald-300 dark:border-emerald-800',
+                        pending: 'text-amber-700 border-amber-300 dark:text-amber-300 dark:border-amber-800',
+                        stale: 'text-red-700 border-red-300 dark:text-red-300 dark:border-red-800',
+                      };
 
                       return (
                         <div key={sub.key} className="border rounded-lg p-4 space-y-3">
@@ -214,6 +236,14 @@ export function SubdivisionScoringStage({
                               <p className="text-xs text-muted-foreground">{sub.description}</p>
                             </div>
                             <div className="flex items-center gap-2">
+                              <Badge variant="outline" className={`gap-1 whitespace-nowrap ${reviewStateStyles[reviewState.state]}`}>
+                                {reviewState.state === 'confirmed' || reviewState.state === 'unscored'
+                                  ? <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                  : reviewState.state === 'stale'
+                                    ? <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                                    : <Clock3 className="h-3 w-3" aria-hidden="true" />}
+                                {reviewState.label}
+                              </Badge>
                               {score && <ConfidenceBadge confidence={score.confidence} />}
                               <MaturityBadge level={score?.maturityLevel ?? null} />
                             </div>

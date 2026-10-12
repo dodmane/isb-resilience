@@ -15,7 +15,7 @@ import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
 import { type DimensionKey } from '@/lib/framework/dimensions';
 import { type Assessment, type StageApproval, type EvidencePlanItem } from '@/types/assessment';
 import { type AuditEntry } from '@/types/audit';
-import { Plus, X, Search, FileText } from 'lucide-react';
+import { Plus, X, Search, FileText, Trash2 } from 'lucide-react';
 
 interface Props {
   assessment: Assessment;
@@ -52,12 +52,32 @@ export function EvidencePlanStage({ assessment, approvals, auditTrail, onRefresh
   });
 
   const [newTargetInputs, setNewTargetInputs] = useState<Record<string, string>>({});
+  const [newSubdivisionSelections, setNewSubdivisionSelections] = useState<Record<string, string>>({});
 
   const stage4Approval = approvals.find(a => a.stage === 4);
   const isApproved = stage4Approval?.status === 'approved';
 
   function getPlanKey(item: EvidencePlanItem) {
     return `${item.dimensionKey}__${item.subdivisionKey}`;
+  }
+
+  function addSubdimension(dimensionKey: string) {
+    const subdivisionKey = newSubdivisionSelections[dimensionKey];
+    const subdivision = SUBDIVISIONS[dimensionKey as DimensionKey]?.find(item => item.key === subdivisionKey);
+    if (!subdivision || plan.some(item => item.dimensionKey === dimensionKey && item.subdivisionKey === subdivisionKey)) return;
+
+    setPlan(prev => [...prev, {
+      dimensionKey,
+      subdivisionKey: subdivision.key,
+      searchTargets: [...subdivision.evidenceHints],
+      sourceTypes: ['annual_report', 'regulatory_filing', 'investor_relations'],
+      notes: '',
+    }]);
+    setNewSubdivisionSelections(prev => ({ ...prev, [dimensionKey]: '' }));
+  }
+
+  function removeSubdimension(planKey: string) {
+    setPlan(prev => prev.filter(item => getPlanKey(item) !== planKey));
   }
 
   function addSearchTarget(planKey: string) {
@@ -124,6 +144,8 @@ export function EvidencePlanStage({ assessment, approvals, auditTrail, onRefresh
     return groups;
   }, [plan]);
 
+  const planSubdimensionCount = plan.filter(item => item.subdivisionKey).length;
+
   const SOURCE_TYPE_LABELS: Record<string, string> = {
     annual_report: 'Annual Reports',
     regulatory_filing: 'Regulatory Filings',
@@ -151,13 +173,15 @@ export function EvidencePlanStage({ assessment, approvals, auditTrail, onRefresh
         </Badge>
         <Badge variant="outline" className="text-sm">
           <FileText className="h-3 w-3 mr-1" />
-          {deepDimensions.length} dimensions × 3 subdivisions
+          {deepDimensions.length} dimensions · {planSubdimensionCount} sub-dimensions
         </Badge>
       </div>
 
-      {Object.entries(groupedPlan).map(([dimKey, items]) => {
-        const dim = DIMENSIONS.find(d => d.key === dimKey);
-        if (!dim) return null;
+      {deepDimensions.map(dim => {
+        const dimKey = dim.key;
+        const items = groupedPlan[dimKey] || [];
+        const availableSubdivisions = (SUBDIVISIONS[dimKey as DimensionKey] || [])
+          .filter(subdivision => !items.some(item => item.subdivisionKey === subdivision.key));
 
         return (
           <Card key={dimKey}>
@@ -168,15 +192,58 @@ export function EvidencePlanStage({ assessment, approvals, auditTrail, onRefresh
               <CardDescription>{dim.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <select
+                  aria-label={`Sub-dimension to add for ${dim.name}`}
+                  className="h-9 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm"
+                  value={newSubdivisionSelections[dimKey] || ''}
+                  onChange={event => setNewSubdivisionSelections(prev => ({ ...prev, [dimKey]: event.target.value }))}
+                  disabled={availableSubdivisions.length === 0}
+                >
+                  <option value="">Select sub-dimension to add</option>
+                  {availableSubdivisions.map(subdivision => (
+                    <option key={subdivision.key} value={subdivision.key}>{subdivision.name}</option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => addSubdimension(dimKey)}
+                  disabled={!newSubdivisionSelections[dimKey]}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add sub-dimension
+                </Button>
+              </div>
+
+              {items.length === 0 && (
+                <p className="text-xs text-muted-foreground">No sub-dimensions are in this evidence plan.</p>
+              )}
+
               {items.map(item => {
                 const sub = SUBDIVISIONS[dimKey as DimensionKey]?.find(s => s.key === item.subdivisionKey);
                 const pk = getPlanKey(item);
 
                 return (
                   <div key={pk} className="border rounded p-3 space-y-3">
-                    <div>
-                      <p className="text-sm font-medium">{sub?.name || item.subdivisionKey}</p>
-                      <p className="text-xs text-muted-foreground">{sub?.description}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{sub?.name || item.subdivisionKey}</p>
+                        <p className="text-xs text-muted-foreground">{sub?.description}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                        aria-label={`Remove ${sub?.name || item.subdivisionKey} from evidence plan`}
+                        title="Remove sub-dimension"
+                        onClick={() => removeSubdimension(pk)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
 
                     <div>
