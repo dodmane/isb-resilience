@@ -5,6 +5,7 @@ import { type ScenarioDirection } from '@/types/scenario';
 import { type DimensionScore } from '@/types/scoring';
 import { type Evidence } from '@/types/evidence';
 import { isLLMConfigured, callLLMJSON } from './client';
+import { latestDataPriorityInstruction, prioritizeLatestEvidence } from './evidence-priority';
 
 export interface ScenarioReasoningResult {
   scenarioMaturity: MaturityLevel | null;
@@ -47,8 +48,8 @@ async function reasonWithLLM(
 ): Promise<ScenarioReasoningResult> {
   const scenario = SCENARIOS.find(s => s.key === scenarioKey);
   const dimension = DIMENSIONS.find(d => d.key === dimensionKey);
-  const accepted = relevantEvidence.filter(e => e.status === 'accepted');
-  const evidenceSummary = accepted.map(e => `- ${e.claim} (${e.sourceTitle})`).join('\n');
+  const accepted = prioritizeLatestEvidence(relevantEvidence.filter(e => e.status === 'accepted'));
+  const evidenceSummary = accepted.map(e => `- ${e.claim} (${e.sourceTitle}; publication date: ${e.publicationDate || 'unknown'})`).join('\n');
 
   const systemPrompt = `You are an AURORA resilience framework analyst performing scenario stress testing.
 
@@ -60,7 +61,8 @@ Rules:
 - The scenario-adjusted maturity can go UP (strengthens), stay SAME (stable), or go DOWN (weakens) relative to base.
 - Adjusted maturity must be 1-4.
 - Every adjustment requires a clear rationale grounded in how the scenario conditions would affect this capability.
-- Reference the specific evidence when explaining your reasoning.`;
+- Reference the specific evidence when explaining your reasoning.
+${latestDataPriorityInstruction()}`;
 
   const userPrompt = `Dimension: ${dimension?.name || dimensionKey} — ${dimension?.description || ''}
 Base Maturity: Level ${baseScore.maturityLevel}

@@ -7,7 +7,7 @@ import { Lock, Download, Check, X, AlertTriangle } from 'lucide-react';
 import { getCriteria, evaluateCriteria, validPolicy, getCriterionReviewMode, RUBRIC_VERSION, type ScoringPolicy, type CriterionFinding, type CriterionInputField, type CriterionValidationIssue, type CriterionReviewMode, type SaaSProfile } from '@/lib/framework/criteria';
 import { normalize, summarizeAssessment, summarizeDimension, subdivisionNumericScore, scoreToMaturity, isScoringPosition, NORMALIZATION_RANGES, POSITION_POINTS, type ScoringPosition } from '@/lib/framework/scoring';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
-import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
+import { SUBDIVISIONS, getAssessmentSubdivisionMap, getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 import { SourceLink } from './SourceLink';
 import { MaturityBadge } from './MaturityBadge';
 import { ConfidenceBadge } from './ConfidenceBadge';
@@ -58,12 +58,17 @@ export function SubdimensionRatingReview({ assessmentId, dimensionKey, subdivisi
   const [position, setPosition] = useState<ScoringPosition | ''>(score?.status === 'stale' ? '' : score?.position || '');
   const [evidenceIds, setEvidenceIds] = useState<string[]>(score?.evidenceIds || []);
   const [rationale, setRationale] = useState(score?.rationale || '');
+  const [overrideReason, setOverrideReason] = useState(score?.overrideReason || '');
   const [reviewer, setReviewer] = useState('');
   const [confidence, setConfidence] = useState(score?.confidence || 'medium');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const numericLevel = level === '' ? null : Number(level) as MaturityLevel;
   const preview = numericLevel && isScoringPosition(position) ? normalize(numericLevel, position) : null;
+  const aiSuggestedLevel = score?.aiSuggestedMaturityLevel ?? (score?.status === 'needs_review' ? score.maturityLevel : null);
+  const aiSuggestedPosition = score?.aiSuggestedPosition ?? (score?.status === 'needs_review' ? score.position ?? null : null);
+  const hasAiSuggestion = aiSuggestedLevel !== null && aiSuggestedPosition !== null;
+  const isAiOverride = hasAiSuggestion && (numericLevel !== aiSuggestedLevel || position !== aiSuggestedPosition);
 
   function toggleEvidence(id: string) {
     setEvidenceIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
@@ -76,7 +81,7 @@ export function SubdimensionRatingReview({ assessmentId, dimensionKey, subdivisi
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ratingMethod: 'level_position', dimensionKey, subdivisionKey,
           maturityLevel: numericLevel, position: numericLevel ? position || null : null,
-          evidenceIds, rationale, reviewedBy: reviewer, confidence }),
+          evidenceIds, rationale, reviewedBy: reviewer, confidence, overrideReason }),
       });
       if (!response.ok) throw new Error((await response.json()).error || 'Could not save rating');
       setError('');
@@ -86,6 +91,11 @@ export function SubdimensionRatingReview({ assessmentId, dimensionKey, subdivisi
   }
 
   return <div className="space-y-3 border-t pt-3">
+    {hasAiSuggestion && (
+      <div className="rounded border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-200">
+        AI suggestion: Level {aiSuggestedLevel}, Position {aiSuggestedPosition}. Edit the fields below to override it.
+      </div>
+    )}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       <label className="text-xs">Level<select aria-label="Rating level" className={inputClass} value={level} onChange={event => setLevel(event.target.value)}>
         <option value="">Not scored</option>{([1, 2, 3, 4] as MaturityLevel[]).map(value => <option key={value} value={value}>{value}</option>)}
@@ -106,6 +116,7 @@ export function SubdimensionRatingReview({ assessmentId, dimensionKey, subdivisi
         </label>)}
     </fieldset>
     <Textarea aria-label="Rating rationale" placeholder="Why does the evidence support this Level and Position?" value={rationale} onChange={event => setRationale(event.target.value)} />
+    {isAiOverride && <Textarea aria-label="Override reason" placeholder="Why does the reviewer rating differ from the AI suggestion?" value={overrideReason} onChange={event => setOverrideReason(event.target.value)} />}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       <label className="text-xs">Reviewer<input aria-label="Rating reviewer" className={inputClass} value={reviewer} onChange={event => setReviewer(event.target.value)} /></label>
       <label className="text-xs">Confidence<select aria-label="Rating confidence" className={inputClass} value={confidence} onChange={event => setConfidence(event.target.value as 'low' | 'medium' | 'high')}>
@@ -113,7 +124,7 @@ export function SubdimensionRatingReview({ assessmentId, dimensionKey, subdivisi
       </select></label>
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    <div className="flex gap-2"><Button size="sm" onClick={save} disabled={saving || !reviewer.trim() || (!!level && !position)}>{saving ? 'Saving...' : 'Confirm Rating'}</Button>
+    <div className="flex gap-2"><Button size="sm" onClick={save} disabled={saving || !reviewer.trim() || (!!level && !position) || (isAiOverride && !overrideReason.trim())}>{saving ? 'Saving...' : isAiOverride ? 'Save Reviewer Override' : 'Confirm Rating'}</Button>
       <Button size="sm" variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button></div>
   </div>;
 }
@@ -357,7 +368,7 @@ export function CriterionReview({ assessmentId, dimensionKey, subdivisionKey, sc
 }
 
 export function EvaluationReadiness({ assessment, scores }: { assessment: Assessment; scores: SubdivisionScore[] }) {
-  const summary = summarizeAssessment(scores);
+  const summary = summarizeAssessment(scores, getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys));
   const reviewMethod = assessment.scoringMethod || (assessment.scoringPolicy?.reviewMode === 'manual' ? 'manual' : 'llm_assisted');
   const [error, setError] = useState('');
   async function download() {
@@ -410,8 +421,9 @@ export function SubdimensionScoringReport({ assessment, scores, evidence }: {
       <p className="text-xs text-muted-foreground">The LLM suggests Level and Position from accepted evidence when enabled. You confirm or edit the suggestion, or enter a rating manually. The application calculates the numeric score; it does not perform exact-quote or reporting-window validation in this simplified flow. Ratings retain linked evidence and reviewer attribution.</p>
     </div>
     {selectedDimensions.map(dimension => {
-      const summary = summarizeDimension(dimension.key, scores);
-      const includedScores = SUBDIVISIONS[dimension.key].map(subdivision => subdivisionNumericScore(
+      const subdivisions = getAssessmentSubdivisions(dimension.key, assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
+      const summary = summarizeDimension(dimension.key, scores, subdivisions);
+      const includedScores = subdivisions.map(subdivision => subdivisionNumericScore(
         scores.find(score => score.dimensionKey === dimension.key && score.subdivisionKey === subdivision.key)
       )).filter((value): value is number => value !== null);
       return <section key={dimension.key} className="space-y-4 min-w-0" aria-labelledby={`scoring-${dimension.key}`}>
@@ -421,11 +433,12 @@ export function SubdimensionScoringReport({ assessment, scores, evidence }: {
             {' · '}{summary.normalizedScore === null ? 'Dimension excluded: at least two eligible ratings required' :
               `Dimension calculation: (${includedScores.join(' + ')}) / ${includedScores.length} = ${summary.normalizedScore.toFixed(1)}/100; Level ${summary.maturityLevel}`}</p>
         </div>
-        {SUBDIVISIONS[dimension.key].map((subdivision, index) => {
+        {subdivisions.map((subdivision, index) => {
           const score = scores.find(item => item.dimensionKey === dimension.key && item.subdivisionKey === subdivision.key);
           const numericScore = subdivisionNumericScore(score);
           const directRating = score?.ratingMethod === 'level_position';
-          const criteria = directRating ? [] : getCriteria(subdivision.key, validPolicy(policy) ? policy.profile : 'standard');
+          const frameworkDefined = SUBDIVISIONS[dimension.key].some(item => item.key === subdivision.key);
+          const criteria = directRating || !frameworkDefined ? [] : getCriteria(subdivision.key, validPolicy(policy) ? policy.profile : 'standard');
           const subEvidence = evidence.filter(item => item.dimensionKey === dimension.key && item.subdivisionKey === subdivision.key);
           let evaluated: ReturnType<typeof evaluateCriteria> | null = null;
           let evaluationIssue = '';
@@ -433,6 +446,7 @@ export function SubdimensionScoringReport({ assessment, scores, evidence }: {
           else if (directRating && score?.status === 'needs_review') evaluationIssue = 'Level/Position suggestion is waiting for reviewer confirmation';
           else if (directRating && score?.status === 'insufficient_evidence') evaluationIssue = score.rationale || 'Reviewer left this sub-dimension unscored';
           else if (directRating) evaluationIssue = score?.reviewedBy ? 'Level/Position rating confirmed by reviewer' : 'Rating not reviewed';
+          else if (!frameworkDefined) evaluationIssue = 'Custom sub-dimensions use direct Level + Position reviewer ratings; framework criteria are not defined.';
           else if (!validPolicy(policy)) evaluationIssue = 'Legacy criterion rating requires its frozen policy';
           else if (!score?.criteria || JSON.stringify(score.policy) !== JSON.stringify(policy)) evaluationIssue = 'No criterion findings under the current frozen policy';
           else {

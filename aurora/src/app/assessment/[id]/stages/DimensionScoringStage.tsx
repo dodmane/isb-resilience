@@ -12,7 +12,7 @@ import { ConfidenceBadge } from '@/components/assessment/ConfidenceBadge';
 import { AuditTrail } from '@/components/assessment/AuditTrail';
 import { EvaluationReadiness } from '@/components/assessment/ScoringGovernance';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
-import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
+import { getAssessmentSubdivisionMap, getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 import { summarizeAssessment, type calculateEvidenceMatchedComparison } from '@/lib/framework/scoring';
 import { type DimensionKey } from '@/lib/framework/dimensions';
 import { type Assessment, type StageApproval } from '@/types/assessment';
@@ -37,7 +37,7 @@ export function DimensionScoringStage({
   const [companies, setCompanies] = useState<Assessment[]>([]);
   const [comparisonId, setComparisonId] = useState('');
   const [comparison, setComparison] = useState<ReturnType<typeof calculateEvidenceMatchedComparison> | null>(null);
-  const summary = summarizeAssessment(subdivisionScores);
+  const summary = summarizeAssessment(subdivisionScores, getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys));
 
   useEffect(() => {
     let active = true;
@@ -184,7 +184,9 @@ export function DimensionScoringStage({
 
                 {deepDimensions.map(dim => {
                   const dimScore = dimensionScores.find(s => s.dimensionKey === dim.key);
-                  const dimSubs = subdivisionScores.filter(s => s.dimensionKey === dim.key);
+                  const activeSubdivisions = getAssessmentSubdivisions(dim.key as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
+                  const activeKeys = new Set(activeSubdivisions.map(subdivision => subdivision.key));
+                  const dimSubs = subdivisionScores.filter(s => s.dimensionKey === dim.key && activeKeys.has(s.subdivisionKey));
                   const coverage = summary.dimensions[dim.key];
 
                   return (
@@ -213,7 +215,7 @@ export function DimensionScoringStage({
                       {/* Subdivision breakdown */}
                       <div className="ml-8 space-y-0.5">
                         {dimSubs.map(subScore => {
-                          const sub = SUBDIVISIONS[dim.key as DimensionKey]?.find(s => s.key === subScore.subdivisionKey);
+                          const sub = activeSubdivisions.find(s => s.key === subScore.subdivisionKey);
                           return (
                             <div key={subScore.subdivisionKey} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] min-w-[608px] gap-2 items-center py-1 text-xs text-muted-foreground">
                               <div className="flex items-center gap-1">

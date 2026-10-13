@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import { type Assessment, type StageApproval, type AssessmentStage } from '@/types/assessment';
+import { type DimensionKey } from '@/lib/framework/dimensions';
 import { type Evidence } from '@/types/evidence';
 import { type AuditEntry } from '@/types/audit';
 import { type SubdivisionScore, type DimensionScore } from '@/types/scoring';
@@ -8,6 +9,7 @@ import { type ScenarioAssessment } from '@/types/scenario';
 import { type ResilienceGap } from '@/types/resilience';
 import { normalize, subdivisionNumericScore, summarizeDimension, scoreToMaturity } from '@/lib/framework/scoring';
 import { evaluateCriteria, validPolicy, evidenceSnapshot } from '@/lib/framework/criteria';
+import { getAssessmentSubdivisionMap, getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 
 const DATA_DIR = path.join(process.cwd(), '.aurora-data');
 
@@ -94,9 +96,13 @@ export function getStageApprovals(assessmentId: string): StageApproval[] {
   const assessment = store.assessments.find(item => item.id === assessmentId);
   const governed = validPolicy(assessment?.scoringPolicy);
   const scores = getSubdivisionScores(assessmentId);
+  const activeSubdivisionKeys = new Set(Object.entries(getAssessmentSubdivisionMap(
+    assessment?.customSubdivisions, assessment?.excludedSubdivisionKeys,
+  )).flatMap(([dimensionKey, subdivisions]) => subdivisions.map(subdivision => `${dimensionKey}:${subdivision.key}`)));
   const usesDirectRatings = assessment?.scoringMethod === 'manual' || assessment?.scoringMethod === 'llm_assisted' ||
     scores.some(score => score.ratingMethod === 'level_position');
-  const invalid = (!governed && !usesDirectRatings) || scores.some(score => score.status === 'stale' || score.status === 'needs_review');
+  const invalid = (!governed && !usesDirectRatings) || scores.some(score => activeSubdivisionKeys.has(`${score.dimensionKey}:${score.subdivisionKey}`) &&
+    (score.status === 'stale' || score.status === 'needs_review'));
   return store.stageApprovals.filter((a) => a.assessmentId === assessmentId).map(approval =>
     invalid && approval.stage >= 6 && approval.status === 'approved' ? { ...approval, status: 'pending', approvedAt: null } : approval);
 }
@@ -228,9 +234,14 @@ export function upsertSubdivisionScore(score: SubdivisionScore): SubdivisionScor
 // Dimension Scores
 export function getDimensionScores(assessmentId: string): DimensionScore[] {
   const store = readStore();
+  const assessment = store.assessments.find(item => item.id === assessmentId);
   const subdivisions = getSubdivisionScores(assessmentId);
   return (store.dimensionScores || []).filter((s) => s.assessmentId === assessmentId).map((score) => {
-    const result = summarizeDimension(score.dimensionKey, subdivisions);
+    const result = summarizeDimension(score.dimensionKey, subdivisions, getAssessmentSubdivisions(
+      score.dimensionKey as DimensionKey,
+      assessment?.customSubdivisions,
+      assessment?.excludedSubdivisionKeys,
+    ));
     return { ...score, normalizedScore: result.normalizedScore, maturityLevel: result.maturityLevel,
       status: result.normalizedScore === null ? 'insufficient_evidence' : 'scored', overrideReason: null };
   });

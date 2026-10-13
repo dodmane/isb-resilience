@@ -1,4 +1,5 @@
 import { type Evidence } from '@/types/evidence';
+import { latestDataPriorityInstruction, prioritizeLatestEvidence } from './evidence-priority';
 import { type MaturityLevel, type Confidence } from '@/types/assessment';
 import { isLLMConfigured, callLLMJSON } from './client';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
@@ -72,7 +73,7 @@ export async function recommendSubdivisionScoreAsync(
   evidence: Evidence[],
   policy?: ScoringPolicy
 ): Promise<ScoringRecommendation> {
-  const accepted = evidence.filter(e => e.status === 'accepted' && !e.isMock && e.dimensionKey === dimensionKey && e.subdivisionKey === subdivisionKey);
+  const accepted = prioritizeLatestEvidence(evidence.filter(e => e.status === 'accepted' && !e.isMock && e.dimensionKey === dimensionKey && e.subdivisionKey === subdivisionKey));
   if (accepted.length === 0) {
     const message = 'No accepted, non-mock evidence is assigned to this sub-dimension. Add and accept supporting evidence, then review all criteria manually.';
     const criteria = unknownFindings(subdivisionKey, policy, message);
@@ -102,6 +103,7 @@ export async function recommendSubdivisionScoreAsync(
     Set basis to record for documented execution or measurements, claim for unverified assertions, unknown for missing evidence. Definite findings require record basis.
     Include one accepted evidence ID, an exact quotation from its excerpt and an observedAt date (YYYY-MM-DD) within the supplied reporting window.
     Use the date of the actual measurement, not today's date or the publication date. Fiscal-year names are not calendar dates: FY2025 may describe a quarter ending in 2024.
+    ${latestDataPriorityInstruction()}
     Evidence describing an observation outside the frozen window cannot support met or not_met here. Return unknown and explain the measurement date and the window mismatch. Never change the source date to make it qualify.
     If an observation date or sufficient evidence cannot be established, return unknown with null value/evidenceId/observedAt and an explanation.
     Return all eight findings plus a short rationale. A human must review them before they become scored.`;

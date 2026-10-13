@@ -32,7 +32,7 @@ export async function PUT(
     return NextResponse.json({ error: 'plan array required' }, { status: 400 });
   }
 
-  updateAssessment(id, { evidencePlan: plan });
+  updateAssessment(id, { evidencePlan: plan, evidencePlanInitialized: true });
 
   addAuditEntry({
     id: uuidv4(),

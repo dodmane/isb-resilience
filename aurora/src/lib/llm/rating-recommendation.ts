@@ -2,10 +2,11 @@ import { type Evidence } from '@/types/evidence';
 import { type MaturityLevel, type Confidence } from '@/types/assessment';
 import { isLLMConfigured, callLLMJSON } from './client';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
-import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
+import { SUBDIVISIONS, type Subdivision } from '@/lib/framework/subdivisions';
 import { type DimensionKey } from '@/lib/framework/dimensions';
 import { isScoringPosition, type ScoringPosition } from '@/lib/framework/scoring';
 import { assessConfidence } from './scoring-recommendation';
+import { latestDataPriorityInstruction, prioritizeLatestEvidence } from './evidence-priority';
 
 export interface RatingRecommendation {
   maturityLevel: MaturityLevel | null;
@@ -33,10 +34,11 @@ function unscored(message: string, evidence: Evidence[]): RatingRecommendation {
 export async function recommendSubdivisionRatingAsync(
   dimensionKey: string,
   subdivisionKey: string,
-  evidence: Evidence[]
+  evidence: Evidence[],
+  customSubdivision?: Subdivision
 ): Promise<RatingRecommendation> {
-  const accepted = evidence.filter(item => item.status === 'accepted' && !item.isMock &&
-    item.dimensionKey === dimensionKey && item.subdivisionKey === subdivisionKey);
+  const accepted = prioritizeLatestEvidence(evidence.filter(item => item.status === 'accepted' && !item.isMock &&
+    item.dimensionKey === dimensionKey && item.subdivisionKey === subdivisionKey));
   if (accepted.length === 0) {
     return unscored('No accepted evidence is available. Enter a rating manually only after attaching supporting evidence, or leave this sub-dimension unscored.', accepted);
   }
@@ -45,7 +47,7 @@ export async function recommendSubdivisionRatingAsync(
   }
 
   const dimension = DIMENSIONS.find(item => item.key === dimensionKey);
-  const subdivision = SUBDIVISIONS[dimensionKey as DimensionKey]?.find(item => item.key === subdivisionKey);
+  const subdivision = customSubdivision || SUBDIVISIONS[dimensionKey as DimensionKey]?.find(item => item.key === subdivisionKey);
   const evidencePayload = accepted.map(item => ({
     id: item.id,
     claim: item.claim,
@@ -60,6 +62,7 @@ export async function recommendSubdivisionRatingAsync(
 Level 1: capability absent or weak. Level 2: some capability exists, but it is inconsistent or incomplete. Level 3: most capability requirements are met through reliable, repeatable processes. Level 4: capability is fully met and advanced, integrated or predictive.
 Position Low means the evidence barely supports the selected Level; Mid means it clearly supports it; High means it strongly supports it but does not establish the next Level. For borderline cases, choose the lower Level with High Position.
 Use only the supplied evidence. Do not invent facts, infer undisclosed performance, or treat missing disclosure as evidence of failure. If a defensible rating is not possible, return maturityLevel and position as null and explain what is missing.
+${latestDataPriorityInstruction()}
 Return only evidence IDs from the supplied list. Give a concise rationale. This is a recommendation for human review, not a final score.`;
   const userPrompt = `Dimension: ${dimension?.name || dimensionKey}
 Sub-dimension: ${subdivision?.name || subdivisionKey}

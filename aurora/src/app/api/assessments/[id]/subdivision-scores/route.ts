@@ -14,7 +14,7 @@ import { isLLMConfigured, getScoringModel } from '@/lib/llm/client';
 import { SCORING_PROMPT_VERSION } from '@/lib/llm/scoring-recommendation';
 import { normalize, scoreToMaturity, isScoringPosition, type ScoringPosition } from '@/lib/framework/scoring';
 import { validPolicy, getCriterionReviewMode, evaluateCriteria, evidenceSnapshot, CriterionValidationError, type CriterionFinding } from '@/lib/framework/criteria';
-import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
+import { getAssessmentSubdivisions, SUBDIVISIONS } from '@/lib/framework/subdivisions';
 import { type DimensionKey } from '@/lib/framework/dimensions';
 import { type SubdivisionScore } from '@/types/scoring';
 import { type Confidence } from '@/types/assessment';
@@ -50,7 +50,7 @@ export async function POST(
   const newScores: SubdivisionScore[] = [];
 
   for (const dimSel of deepDims) {
-    const subs = SUBDIVISIONS[dimSel.dimensionKey as DimensionKey] || [];
+    const subs = getAssessmentSubdivisions(dimSel.dimensionKey as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
     for (const sub of subs) {
       const alreadyScored = existing.find(
         s => s.dimensionKey === dimSel.dimensionKey && s.subdivisionKey === sub.key && !!s.reviewedAt && s.status !== 'stale'
@@ -61,7 +61,7 @@ export async function POST(
         e => e.dimensionKey === dimSel.dimensionKey && e.subdivisionKey === sub.key
       );
 
-      const recommendation = await recommendSubdivisionRatingAsync(dimSel.dimensionKey, sub.key, subEvidence);
+      const recommendation = await recommendSubdivisionRatingAsync(dimSel.dimensionKey, sub.key, subEvidence, sub);
 
       const score: SubdivisionScore = {
         id: uuidv4(),
@@ -71,6 +71,9 @@ export async function POST(
         maturityLevel: recommendation.maturityLevel,
         position: recommendation.position,
         ratingMethod: 'level_position',
+        ratingOrigin: 'ai_recommendation',
+        aiSuggestedMaturityLevel: recommendation.maturityLevel,
+        aiSuggestedPosition: recommendation.position,
         scoreOverride: null,
         normalizedScore: null,
         absoluteScore: null,
@@ -122,11 +125,12 @@ export async function PATCH(
   if (body.ratingMethod === 'level_position') {
     const assessment = getAssessment(id);
     if (!assessment) return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
-    const { dimensionKey, subdivisionKey, maturityLevel, position, evidenceIds, rationale, reviewedBy, confidence } = body as {
+    const { dimensionKey, subdivisionKey, maturityLevel, position, evidenceIds, rationale, reviewedBy, confidence, overrideReason } = body as {
       dimensionKey: string; subdivisionKey: string; maturityLevel: number | null; position: ScoringPosition | null;
-      evidenceIds: string[]; rationale?: string; reviewedBy: string; confidence?: Confidence;
+      evidenceIds: string[]; rationale?: string; reviewedBy: string; confidence?: Confidence; overrideReason?: string;
     };
-    if (!SUBDIVISIONS[dimensionKey as DimensionKey]?.some(sub => sub.key === subdivisionKey)) {
+    const activeSubdivisions = getAssessmentSubdivisions(dimensionKey as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
+    if (!activeSubdivisions.some(sub => sub.key === subdivisionKey)) {
       return NextResponse.json({ error: 'Unknown dimension or subdivision' }, { status: 400 });
     }
     const isUnscored = maturityLevel === null && position === null;
@@ -151,14 +155,24 @@ export async function PATCH(
     const linkedEvidence = acceptedEvidence.filter(item => selectedIds.includes(item.id));
     const level = isUnscored ? null : maturityLevel as 1 | 2 | 3 | 4;
     const selectedPosition = isUnscored ? null : position;
+    const aiSuggestedMaturityLevel = existing?.aiSuggestedMaturityLevel ??
+      (existing?.status === 'needs_review' ? existing.maturityLevel : null);
+    const aiSuggestedPosition = existing?.aiSuggestedPosition ??
+      (existing?.status === 'needs_review' ? existing.position ?? null : null);
+    const isAiOverride = aiSuggestedMaturityLevel !== null && aiSuggestedPosition !== null &&
+      (level !== aiSuggestedMaturityLevel || selectedPosition !== aiSuggestedPosition);
+    if (isAiOverride && (typeof overrideReason !== 'string' || !overrideReason.trim())) {
+      return NextResponse.json({ error: 'Explain why the reviewer rating differs from the AI suggestion.' }, { status: 400 });
+    }
     const normalizedScore = level && selectedPosition ? normalize(level, selectedPosition) : null;
     const rating: SubdivisionScore = {
       id: existing?.id || uuidv4(), assessmentId: id, dimensionKey, subdivisionKey,
       maturityLevel: level, position: selectedPosition, ratingMethod: 'level_position',
+      ratingOrigin: 'reviewer', aiSuggestedMaturityLevel, aiSuggestedPosition,
       normalizedScore, absoluteScore: normalizedScore, confidence: confidence || existing?.confidence || 'medium',
       status: isUnscored ? 'insufficient_evidence' : 'scored',
       rationale: typeof rationale === 'string' && rationale.trim() ? rationale.trim() : isUnscored ? 'Reviewer left this sub-dimension unscored.' : 'Level and Position confirmed by reviewer.',
-      overrideReason: null, evidenceIds: selectedIds, criteria: undefined, extractionIssue: undefined,
+      overrideReason: isAiOverride ? overrideReason!.trim() : null, evidenceIds: selectedIds, criteria: undefined, extractionIssue: undefined,
       policy: assessment.scoringPolicy, evidenceSnapshot: evidenceSnapshot(linkedEvidence),
       reviewedAt: now, reviewedBy: reviewedBy.trim(), staleReason: undefined,
       extractionModel: existing?.extractionModel || 'manual', promptVersion: SCORING_PROMPT_VERSION,
@@ -166,10 +180,10 @@ export async function PATCH(
     };
     upsertSubdivisionScore(rating);
     invalidateApprovalsAfterStage(id, 5);
-    addAuditEntry({ id: uuidv4(), assessmentId: id, action: 'subdivision_rating_confirmed', entityType: 'subdivision_score', entityId: rating.id,
+    addAuditEntry({ id: uuidv4(), assessmentId: id, action: isAiOverride ? 'subdivision_rating_overridden' : 'subdivision_rating_confirmed', entityType: 'subdivision_score', entityId: rating.id,
       oldValue: existing ? { maturityLevel: existing.maturityLevel, position: existing.position, status: existing.status } : null,
-      newValue: { maturityLevel: rating.maturityLevel, position: rating.position, normalizedScore: rating.normalizedScore, evidenceIds: rating.evidenceIds, reviewedBy: rating.reviewedBy },
-      reason: rating.rationale, actor: 'user', timestamp: now });
+      newValue: { maturityLevel: rating.maturityLevel, position: rating.position, normalizedScore: rating.normalizedScore, aiSuggestedMaturityLevel, aiSuggestedPosition, ratingOrigin: rating.ratingOrigin, evidenceIds: rating.evidenceIds, reviewedBy: rating.reviewedBy, overrideReason: rating.overrideReason },
+      reason: rating.overrideReason || rating.rationale, actor: 'user', timestamp: now });
     return NextResponse.json(rating);
   }
 
@@ -188,8 +202,12 @@ export async function PATCH(
   }
   if (!validPolicy(assessment.scoringPolicy)) return NextResponse.json({ error: 'Freeze the scoring policy before reviewing criteria' }, { status: 409 });
   if ('maturityLevel' in body || 'position' in body) return NextResponse.json({ error: 'Level and Position are calculated from criteria, not editable inputs' }, { status: 400 });
-  if (!SUBDIVISIONS[dimensionKey as DimensionKey]?.some(sub => sub.key === subdivisionKey)) {
+  if (!getAssessmentSubdivisions(dimensionKey as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys)
+    .some(sub => sub.key === subdivisionKey)) {
     return NextResponse.json({ error: 'Unknown dimension or subdivision' }, { status: 400 });
+  }
+  if (!(SUBDIVISIONS[dimensionKey as DimensionKey] || []).some(sub => sub.key === subdivisionKey)) {
+    return NextResponse.json({ error: 'Custom sub-dimensions require direct Level and Position ratings; rubric criteria are available for framework sub-dimensions only.' }, { status: 400 });
   }
 
   const hasOverride = scoreOverride != null;

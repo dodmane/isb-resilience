@@ -1,9 +1,10 @@
 import { type Evidence, type EvidenceSourceType } from '@/types/evidence';
 import { type EvidencePlanItem } from '@/types/assessment';
-import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
+import { SUBDIVISIONS, type Subdivision } from '@/lib/framework/subdivisions';
 import { DIMENSIONS, type DimensionKey } from '@/lib/framework/dimensions';
 import { v4 as uuidv4 } from 'uuid';
 import { isLLMConfigured, callLLMJSON } from './client';
+import { latestDataPriorityInstruction, prioritizeLatestEvidence } from './evidence-priority';
 
 export interface ResearchResult {
   evidence: Evidence[];
@@ -14,23 +15,25 @@ export async function researchEvidence(
   assessmentId: string,
   companyName: string,
   plan: EvidencePlanItem[],
-  existingEvidence: Evidence[]
+  existingEvidence: Evidence[],
+  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>> = SUBDIVISIONS
 ): Promise<ResearchResult> {
   if (isLLMConfigured()) {
     try {
-      return await researchWithLLM(assessmentId, companyName, plan, existingEvidence);
+      return await researchWithLLM(assessmentId, companyName, plan, existingEvidence, assessmentSubdivisions);
     } catch (err) {
       console.error('LLM research failed, falling back to mock:', err);
     }
   }
-  return researchMock(assessmentId, companyName, plan, existingEvidence);
+  return researchMock(assessmentId, companyName, plan, existingEvidence, assessmentSubdivisions);
 }
 
 async function researchWithLLM(
   assessmentId: string,
   companyName: string,
   plan: EvidencePlanItem[],
-  existingEvidence: Evidence[]
+  existingEvidence: Evidence[],
+  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>>
 ): Promise<ResearchResult> {
   const allEvidence: Evidence[] = [];
   const now = new Date().toISOString();
@@ -44,18 +47,14 @@ async function researchWithLLM(
 
   for (const [dimKey, items] of Object.entries(dimGroups)) {
     const dim = DIMENSIONS.find(d => d.key === dimKey);
-    const subs = SUBDIVISIONS[dimKey as DimensionKey] || [];
-    const targetSubs = items.flatMap(item => {
+    const subs = assessmentSubdivisions[dimKey as DimensionKey] || [];
+    const targetSubs = [...new Map(items.flatMap(item => {
       if (item.subdivisionKey) {
         const sub = subs.find(s => s.key === item.subdivisionKey);
-        return sub ? [sub] : [];
+        return sub ? [[sub.key, sub] as const] : [];
       }
-      return subs;
-    }).filter(sub => {
-      return !existingEvidence.some(
-        e => e.dimensionKey === dimKey && e.subdivisionKey === sub.key && e.status !== 'rejected'
-      );
-    });
+      return subs.map(sub => [sub.key, sub] as const);
+    })).values()];
 
     if (targetSubs.length === 0) continue;
 
@@ -72,10 +71,27 @@ RULES:
 - Every URL must be a real, verifiable public URL. If you are NOT confident a URL exists, set sourceUrl to null.
 - NEVER fabricate URLs, data points, or quotes.
 - Extract specific numbers, percentages, dates where available.
-- If evidence is not publicly available for a subdivision, skip it — do not guess.`;
+- If evidence is not publicly available for a subdivision, skip it — do not guess.
+- ${latestDataPriorityInstruction()}
+- Existing evidence is supplied for comparison: search for newer reporting-year data first, and do not return an exact duplicate when no newer source or value is available.`;
+
+    const existingEvidenceForTargets = existingEvidence
+      .filter(item => item.dimensionKey === dimKey && targetSubs.some(sub => sub.key === item.subdivisionKey))
+      .map(item => ({
+        subdivisionKey: item.subdivisionKey,
+        claim: item.claim,
+        extractedValue: item.extractedValue,
+        sourceTitle: item.sourceTitle,
+        publicationDate: item.publicationDate,
+        sourceUrl: item.sourceUrl,
+        status: item.status,
+      }));
 
     const userPrompt = `Research "${companyName}" for AURORA dimension: ${dim?.name || dimKey}
 Description: ${dim?.description || ''}
+
+Existing evidence to compare against (prefer a newer reporting year; do not repeat these exact items):
+${JSON.stringify(existingEvidenceForTargets)}
 
 For each of the following subdivisions, find 1-2 pieces of credible public evidence:
 
@@ -114,6 +130,11 @@ Return ONLY evidence you can back with a real public source. Skip subdivisions w
       for (const r of results) {
         const validSub = targetSubs.find(s => s.key === r.subdivisionKey);
         if (!validSub) continue;
+        const isDuplicate = existingEvidence.some(item => item.dimensionKey === dimKey && item.subdivisionKey === r.subdivisionKey && (
+          (r.sourceUrl && item.sourceUrl === r.sourceUrl && item.publicationDate === r.publicationDate) ||
+          (!r.sourceUrl && item.sourceTitle.trim() === (r.sourceTitle || '').trim() && item.publicationDate === r.publicationDate && item.claim.trim() === (r.claim || '').trim())
+        ));
+        if (isDuplicate) continue;
 
         allEvidence.push({
           id: uuidv4(),
@@ -144,7 +165,7 @@ Return ONLY evidence you can back with a real public source. Skip subdivisions w
   }
 
   return {
-    evidence: allEvidence,
+    evidence: prioritizeLatestEvidence(allEvidence),
     searchSummary: `LLM research generated ${allEvidence.length} evidence items for ${companyName} across ${Object.keys(dimGroups).length} dimensions.`,
   };
 }
@@ -153,7 +174,8 @@ function researchMock(
   assessmentId: string,
   companyName: string,
   plan: EvidencePlanItem[],
-  existingEvidence: Evidence[]
+  existingEvidence: Evidence[],
+  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>>
 ): ResearchResult {
   const evidence: Evidence[] = [];
   const now = new Date().toISOString();
@@ -164,7 +186,7 @@ function researchMock(
 
   for (const item of plan) {
     const dimKey = item.dimensionKey as DimensionKey;
-    const subs = SUBDIVISIONS[dimKey] || [];
+    const subs = assessmentSubdivisions[dimKey] || [];
 
     if (item.subdivisionKey) {
       const sub = subs.find(s => s.key === item.subdivisionKey);

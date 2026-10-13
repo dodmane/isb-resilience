@@ -67,6 +67,7 @@ Include ALL 15 dimensions. Set deepAssessment=false for dimensions less material
       selected: r?.selected ?? true,
       deepAssessment: r?.deepAssessment ?? SAAS_MATERIALITY[d.key].defaultSelected,
       relevanceRationale: r?.relevanceRationale || SAAS_MATERIALITY[d.key].saasRelevance,
+      selectionOrigin: r ? 'ai_recommendation' : 'framework_default',
     };
   });
 }
@@ -77,5 +78,6 @@ function getDefaultSelections(): DimensionSelection[] {
     selected: true,
     deepAssessment: SAAS_MATERIALITY[d.key].defaultSelected,
     relevanceRationale: SAAS_MATERIALITY[d.key].saasRelevance,
+    selectionOrigin: 'framework_default',
   }));
 }

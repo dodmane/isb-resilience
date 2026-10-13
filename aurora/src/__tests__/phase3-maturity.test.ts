@@ -342,6 +342,50 @@ describe('Phase 3: Maturity Assessment', () => {
       }
     });
 
+    it('requires a reason for changing an AI suggestion and preserves the original rating', async () => {
+      const overrideAssessmentId = uuidv4();
+      const overrideEvidenceId = uuidv4();
+      const now = new Date().toISOString();
+      createAssessment({
+        id: overrideAssessmentId, companyName: 'Override Test Co', companyDescription: '', industry: 'SaaS', companySize: 'small',
+        dataSourceMode: 'public', currentStage: 6 as AssessmentStage, assessmentLens: 'SaaS/IT', scenarioNarratives: {},
+        dimensionSelections: [{ dimensionKey: 'revenue_durability', selected: true, deepAssessment: true, relevanceRationale: '' }],
+        evidencePlan: [], createdAt: now, updatedAt: now,
+      });
+      createEvidence({ id: overrideEvidenceId, assessmentId: overrideAssessmentId, claim: 'NRR was 105%', extractedValue: '105%',
+        supportingExcerpt: 'Net revenue retention was 105% for the measured customer cohort.', sourceTitle: 'Annual Report', publisher: 'Test Co',
+        sourceUrl: 'https://example.com/report', sourceType: 'annual_report', publicationDate: '2026-03-01', retrievalTimestamp: now,
+        pageNumber: null, dimensionKey: 'revenue_durability', subdivisionKey: 'retention_nrr', urlResolved: true, status: 'accepted',
+        rejectionReason: null, sourceOrigin: 'user_provided', isMock: false, createdAt: now });
+      upsertSubdivisionScore({
+        id: uuidv4(), assessmentId: overrideAssessmentId, dimensionKey: 'revenue_durability', subdivisionKey: 'retention_nrr',
+        maturityLevel: 2, position: 'Low', ratingMethod: 'level_position', ratingOrigin: 'ai_recommendation',
+        aiSuggestedMaturityLevel: 2, aiSuggestedPosition: 'Low', normalizedScore: null, absoluteScore: null,
+        confidence: 'medium', status: 'needs_review', rationale: 'AI suggestion', overrideReason: null,
+        evidenceIds: [overrideEvidenceId], isMockRecommendation: false, reviewedAt: null, reviewedBy: null,
+        createdAt: now, updatedAt: now,
+      });
+
+      const rating = { ratingMethod: 'level_position', dimensionKey: 'revenue_durability', subdivisionKey: 'retention_nrr',
+        maturityLevel: 3, position: 'Mid', evidenceIds: [overrideEvidenceId], rationale: 'Reviewer assessment based on cited evidence.',
+        reviewedBy: 'Reviewer', confidence: 'medium' };
+      try {
+        const missingReason = await patchSubdivision(request(rating), { params: Promise.resolve({ id: overrideAssessmentId }) });
+        expect(missingReason.status).toBe(400);
+
+        const response = await patchSubdivision(request({ ...rating, overrideReason: 'Additional evidence supports a higher level.' }),
+          { params: Promise.resolve({ id: overrideAssessmentId }) });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          maturityLevel: 3, position: 'Mid', normalizedScore: 63, status: 'scored', ratingOrigin: 'reviewer',
+          aiSuggestedMaturityLevel: 2, aiSuggestedPosition: 'Low',
+          overrideReason: 'Additional evidence supports a higher level.',
+        });
+      } finally {
+        deleteAssessment(overrideAssessmentId);
+      }
+    });
+
     it('saves reviewed criteria and recomputes aggregates without direct maturity inputs', async () => {
       const secondId = uuidv4();
       for (const [sourceId, sub] of [[evidenceId, 'retention_nrr'], [secondId, 'pricing_power_mix']]) createEvidence({ id: sourceId, assessmentId, claim: 'Audited retention metrics', extractedValue: '105% NRR',

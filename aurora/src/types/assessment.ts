@@ -1,4 +1,5 @@
 import { type ScoringPolicy } from '@/lib/framework/criteria';
+import { type AssessmentSubdivision } from '@/lib/framework/subdivisions';
 
 export type ScoringMethod = 'manual' | 'llm_assisted';
 export type MaturityLevel = 1 | 2 | 3 | 4;
@@ -44,8 +45,13 @@ export interface Assessment {
   currentStage: AssessmentStage;
   assessmentLens: string;
   scenarioNarratives: Record<string, string>;
+  scenarioSources?: Record<string, string>;
+  scenarioDerivations?: Record<string, string>;
   dimensionSelections: DimensionSelection[];
   evidencePlan: EvidencePlanItem[];
+  evidencePlanInitialized?: boolean;
+  customSubdivisions?: AssessmentSubdivision[];
+  excludedSubdivisionKeys?: string[];
   scoringMethod?: ScoringMethod;
   scoringPolicy?: ScoringPolicy;
   discoveryIsMock?: boolean;
@@ -58,6 +64,7 @@ export interface DimensionSelection {
   selected: boolean;
   deepAssessment: boolean;
   relevanceRationale: string;
+  selectionOrigin?: 'framework_default' | 'ai_recommendation' | 'reviewer';
 }
 
 export interface EvidencePlanItem {
@@ -66,6 +73,7 @@ export interface EvidencePlanItem {
   searchTargets: string[];
   sourceTypes: string[];
   notes: string;
+  planOrigin?: 'framework_default' | 'reviewer';
 }
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';

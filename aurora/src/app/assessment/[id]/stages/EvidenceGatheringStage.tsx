@@ -22,7 +22,7 @@ import { EvidenceCard } from '@/components/assessment/EvidenceCard';
 import { EvidenceDrawer } from '@/components/assessment/EvidenceDrawer';
 import { AuditTrail } from '@/components/assessment/AuditTrail';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
-import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
+import { getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 import { type DimensionKey } from '@/lib/framework/dimensions';
 import { type Assessment, type StageApproval } from '@/types/assessment';
 import { type Evidence, type EvidenceSourceType } from '@/types/evidence';
@@ -190,7 +190,7 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
   }
 
   const hasMissingEvidence = deepDimensions.some(dim => {
-    const subs = SUBDIVISIONS[dim.key as DimensionKey];
+    const subs = getAssessmentSubdivisions(dim.key as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
     return subs.some(sub => {
       const subEvidence = evidence.filter(
         e => e.dimensionKey === dim.key && e.subdivisionKey === sub.key && e.status !== 'rejected'
@@ -260,7 +260,7 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
       {/* Evidence grouped by dimension → subdivision */}
       {deepDimensions.map(dim => {
         const dimEvidence = evidenceByDimension[dim.key] || [];
-        const subs = SUBDIVISIONS[dim.key as DimensionKey];
+        const subs = getAssessmentSubdivisions(dim.key as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
 
         return (
           <Card key={dim.key}>
@@ -398,7 +398,7 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
                   onChange={e => setAddSubdivision(e.target.value)}
                 >
                   <option value="">General (no subdivision)</option>
-                  {SUBDIVISIONS[addDimension as DimensionKey]?.map(s => (
+                  {getAssessmentSubdivisions(addDimension as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys).map(s => (
                     <option key={s.key} value={s.key}>{s.name}</option>
                   ))}
                 </select>
@@ -499,7 +499,7 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
                   onChange={e => setUploadSubdivision(e.target.value)}
                 >
                   <option value="">General</option>
-                  {SUBDIVISIONS[uploadDimension as DimensionKey]?.map(s => (
+                  {getAssessmentSubdivisions(uploadDimension as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys).map(s => (
                     <option key={s.key} value={s.key}>{s.name}</option>
                   ))}
                 </select>

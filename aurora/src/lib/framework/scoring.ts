@@ -1,6 +1,6 @@
 import { type MaturityLevel } from '@/types/assessment';
 import { type SubdivisionScore } from '@/types/scoring';
-import { SUBDIVISIONS } from './subdivisions';
+import { SUBDIVISIONS, type Subdivision } from './subdivisions';
 import { DIMENSIONS, type DimensionKey } from './dimensions';
 import { validPolicy, type ScoringPolicy } from './criteria';
 
@@ -39,22 +39,25 @@ export function subdivisionNumericScore(score: SubdivisionScore | undefined): nu
   return score.maturityLevel && isScoringPosition(score.position) ? normalize(score.maturityLevel, score.position) : null;
 }
 
-export function summarizeDimension(dimensionKey: string, scores: SubdivisionScore[]) {
-  return calculateDimensionScore((SUBDIVISIONS[dimensionKey as DimensionKey] || []).map((sub) =>
+export function summarizeDimension(dimensionKey: string, scores: SubdivisionScore[], subdivisions?: Subdivision[]) {
+  return calculateDimensionScore((subdivisions || SUBDIVISIONS[dimensionKey as DimensionKey] || []).map((sub) =>
     subdivisionNumericScore(scores.find((score) => score.dimensionKey === dimensionKey && score.subdivisionKey === sub.key))
   ));
 }
 
-export function summarizeAssessment(scores: SubdivisionScore[]) {
-  const dimensions = Object.fromEntries(DIMENSIONS.map((dimension) => [dimension.key, summarizeDimension(dimension.key, scores)]));
+export function summarizeAssessment(scores: SubdivisionScore[], subdivisionsByDimension: Partial<Record<DimensionKey, Subdivision[]>> = SUBDIVISIONS) {
+  const dimensions = Object.fromEntries(DIMENSIONS.map((dimension) => [dimension.key,
+    summarizeDimension(dimension.key, scores, subdivisionsByDimension[dimension.key]) ]));
   const scoredCount = Object.values(dimensions).reduce((sum, dimension) => sum + dimension.scoredCount, 0);
   const totalCount = Object.values(dimensions).reduce((sum, dimension) => sum + dimension.totalCount, 0);
   const composite = calculateComposite(Object.values(dimensions));
   const blockers: string[] = [];
   if (composite.normalizedScore === null) blockers.push('No dimensions meet the minimum sub-dimension coverage');
-  if (scores.some(score => score.status === 'needs_review' || score.status === 'stale')) blockers.push('Pending or stale sub-dimension ratings');
-  if (scores.some(score => score.scoreOverride != null)) blockers.push('Endpoint exceptions require a separate non-comparative evaluation');
-  const absoluteDimensions = DIMENSIONS.map(dimension => calculateDimensionScore(SUBDIVISIONS[dimension.key].map(sub => {
+  const activeKeys = new Set(DIMENSIONS.flatMap(dimension => (subdivisionsByDimension[dimension.key] || []).map(sub => `${dimension.key}:${sub.key}`)));
+  const activeScores = scores.filter(score => activeKeys.has(`${score.dimensionKey}:${score.subdivisionKey}`));
+  if (activeScores.some(score => score.status === 'needs_review' || score.status === 'stale')) blockers.push('Pending or stale sub-dimension ratings');
+  if (activeScores.some(score => score.scoreOverride != null)) blockers.push('Endpoint exceptions require a separate non-comparative evaluation');
+  const absoluteDimensions = DIMENSIONS.map(dimension => calculateDimensionScore((subdivisionsByDimension[dimension.key] || []).map(sub => {
     const score = scores.find(item => item.dimensionKey === dimension.key && item.subdivisionKey === sub.key);
     return score && subdivisionNumericScore(score) !== null ? score.absoluteScore ?? null : null;
   })));
@@ -121,7 +124,14 @@ export function calculateLikeForLike(first: Record<string, ReturnType<typeof cal
   };
 }
 
-export function calculateEvidenceMatchedComparison(first: SubdivisionScore[], second: SubdivisionScore[], firstPolicy?: ScoringPolicy, secondPolicy?: ScoringPolicy) {
+export function calculateEvidenceMatchedComparison(
+  first: SubdivisionScore[],
+  second: SubdivisionScore[],
+  firstPolicy?: ScoringPolicy,
+  secondPolicy?: ScoringPolicy,
+  firstSubdivisions: Partial<Record<DimensionKey, Subdivision[]>> = SUBDIVISIONS,
+  secondSubdivisions: Partial<Record<DimensionKey, Subdivision[]>> = SUBDIVISIONS
+) {
   const policiesMatch = validPolicy(firstPolicy) && validPolicy(secondPolicy) && firstPolicy.profile === secondPolicy.profile &&
     firstPolicy.periodStart === secondPolicy.periodStart && firstPolicy.periodEnd === secondPolicy.periodEnd;
   const directWithoutPolicies = !firstPolicy && !secondPolicy;
@@ -130,7 +140,8 @@ export function calculateEvidenceMatchedComparison(first: SubdivisionScore[], se
   const secondDimensions: Record<string, ReturnType<typeof calculateDimensionScore>> = {};
   let matchedCount = 0;
   if (compatible) for (const dimension of DIMENSIONS) {
-    const matches = SUBDIVISIONS[dimension.key].map(sub => {
+    const secondKeys = new Set((secondSubdivisions[dimension.key] || []).map(sub => sub.key));
+    const matches = (firstSubdivisions[dimension.key] || []).filter(sub => secondKeys.has(sub.key)).map(sub => {
       const firstScore = first.find(item => item.dimensionKey === dimension.key && item.subdivisionKey === sub.key);
       const secondScore = second.find(item => item.dimensionKey === dimension.key && item.subdivisionKey === sub.key);
       return [subdivisionNumericScore(firstScore), subdivisionNumericScore(secondScore)];

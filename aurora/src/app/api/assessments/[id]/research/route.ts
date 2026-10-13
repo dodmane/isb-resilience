@@ -7,6 +7,7 @@ import {
   addAuditEntry,
 } from '@/lib/db/store';
 import { researchEvidence } from '@/lib/llm/research';
+import { getAssessmentSubdivisionMap } from '@/lib/framework/subdivisions';
 
 export async function POST(
   _request: NextRequest,
@@ -28,7 +29,8 @@ export async function POST(
     id,
     assessment.companyName,
     assessment.evidencePlan,
-    existing
+    existing,
+    getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys)
   );
 
   for (const ev of result.evidence) {

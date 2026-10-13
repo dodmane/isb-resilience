@@ -12,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SCENARIOS } from '@/lib/framework/scenarios';
 import { type Assessment, type StageApproval } from '@/types/assessment';
 import { type AuditEntry } from '@/types/audit';
-import { FlaskConical, Zap, CloudLightning, Settings, AlertTriangle } from 'lucide-react';
+import { FlaskConical, Zap, CloudLightning, Settings, AlertTriangle, ExternalLink, Save } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 const SCENARIO_ICONS: Record<string, React.ReactNode> = {
   autonomous_advantage: <Zap className="h-5 w-5 text-green-600" />,
@@ -28,6 +29,15 @@ const AXIS_LABELS: Record<string, string> = {
   exposed_and_reactive: 'Low AI / High Macro Disruption',
 };
 
+function isWebUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 interface Props {
   assessment: Assessment;
   approvals: StageApproval[];
@@ -39,7 +49,18 @@ export function ScenarioContextStage({ assessment, approvals, auditTrail, onRefr
   const [narratives, setNarratives] = useState<Record<string, string>>(
     assessment.scenarioNarratives || {}
   );
+  const [sources, setSources] = useState<Record<string, string>>(assessment.scenarioSources || {});
+  const [derivations, setDerivations] = useState<Record<string, string>>(() => {
+    const existing = assessment.scenarioDerivations || {};
+    return Object.fromEntries(SCENARIOS.map(scenario => [
+      scenario.key,
+      existing[scenario.key] || `Framework scenario: ${scenario.description} Contextualized for ${assessment.companyName} using its ${assessment.industry} industry, ${assessment.companySize || 'medium'} company size, and company profile.`,
+    ]));
+  });
   const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saved, setSaved] = useState(false);
   const hasNarratives = Object.keys(narratives).length === 4;
 
   const stage2Approval = approvals.find(a => a.stage === 2);
@@ -60,15 +81,32 @@ export function ScenarioContextStage({ assessment, approvals, auditTrail, onRefr
   }
 
   async function saveNarratives() {
-    await fetch(`/api/assessments/${assessment.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scenarioNarratives: narratives }),
-    });
+    setSaving(true);
+    setSaveError('');
+    setSaved(false);
+    try {
+      const response = await fetch(`/api/assessments/${assessment.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenarioNarratives: narratives,
+          scenarioSources: sources,
+          scenarioDerivations: derivations,
+        }),
+      });
+      if (!response.ok) throw new Error('Could not save scenario context. Please try again.');
+      setSaved(true);
+      return true;
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save scenario context.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleApprove(notes: string) {
-    await saveNarratives();
+    if (!(await saveNarratives())) return;
     await fetch(`/api/assessments/${assessment.id}/approvals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -166,16 +204,66 @@ export function ScenarioContextStage({ assessment, approvals, auditTrail, onRefr
                   </CardTitle>
                   <CardDescription>{scenario.description}</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <Textarea
-                    value={narratives[scenario.key] || ''}
-                    onChange={e => setNarratives(prev => ({ ...prev, [scenario.key]: e.target.value }))}
-                    rows={6}
-                    className="text-sm"
-                  />
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <label htmlFor={`${scenario.key}-narrative`} className="text-sm font-medium">Scenario context</label>
+                    <Textarea
+                      id={`${scenario.key}-narrative`}
+                      value={narratives[scenario.key] || ''}
+                      onChange={e => {
+                        setNarratives(prev => ({ ...prev, [scenario.key]: e.target.value }));
+                        setSaved(false);
+                      }}
+                      rows={6}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <label htmlFor={`${scenario.key}-source`} className="text-sm font-medium">Source link</label>
+                      <Input
+                        id={`${scenario.key}-source`}
+                        type="url"
+                        value={sources[scenario.key] || ''}
+                        onChange={e => {
+                          setSources(prev => ({ ...prev, [scenario.key]: e.target.value }));
+                          setSaved(false);
+                        }}
+                        placeholder="https://example.com/source"
+                      />
+                      {isWebUrl(sources[scenario.key] || '') && (
+                        <a href={sources[scenario.key]} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 break-all text-xs text-blue-600 underline dark:text-blue-400">
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                          Open source
+                        </a>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label htmlFor={`${scenario.key}-derivation`} className="text-sm font-medium">How this context is derived</label>
+                      <Textarea
+                        id={`${scenario.key}-derivation`}
+                        value={derivations[scenario.key] || ''}
+                        onChange={e => {
+                          setDerivations(prev => ({ ...prev, [scenario.key]: e.target.value }));
+                          setSaved(false);
+                        }}
+                        rows={4}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" onClick={saveNarratives} disabled={saving}>
+              <Save className="h-4 w-4 mr-1" />
+              {saving ? 'Saving...' : 'Save Context'}
+            </Button>
+            {saved && <p role="status" className="text-sm text-muted-foreground">Scenario context saved.</p>}
+            {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
           </div>
 
           <Tabs defaultValue="audit">

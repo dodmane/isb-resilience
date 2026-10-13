@@ -13,6 +13,8 @@ import {
 import { summarizeDimension, summarizeAssessment, calculateEvidenceMatchedComparison } from '@/lib/framework/scoring';
 import { aggregateConfidence } from '@/lib/llm/scoring-recommendation';
 import { type DimensionScore } from '@/types/scoring';
+import { getAssessmentSubdivisionMap, getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
+import { type DimensionKey } from '@/lib/framework/dimensions';
 
 export async function GET(
   request: NextRequest,
@@ -23,7 +25,8 @@ export async function GET(
   if (!assessment) return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   if (request.nextUrl.searchParams.get('summary') === 'true') {
     const subdivisions = getSubdivisionScores(id);
-    const summary = summarizeAssessment(subdivisions);
+    const subdivisionMap = getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
+    const summary = summarizeAssessment(subdivisions, subdivisionMap);
     if (request.nextUrl.searchParams.get('export') === 'true') return NextResponse.json({ ...summary, policy: assessment.scoringPolicy || null,
       companyName: assessment.companyName, generatedAt: new Date().toISOString(), ratings: subdivisions, evidence: getEvidenceForAssessment(id), audit: getAuditTrail(id) });
     const comparisonId = request.nextUrl.searchParams.get('compareWith');
@@ -31,8 +34,11 @@ export async function GET(
       const other = getAssessment(comparisonId);
       if (!other) return NextResponse.json({ error: 'Comparison assessment not found' }, { status: 404 });
       const otherScores = getSubdivisionScores(comparisonId);
-      const comparison = summarizeAssessment(otherScores);
-      return NextResponse.json({ ...summary, comparison, likeForLike: calculateEvidenceMatchedComparison(subdivisions, otherScores, assessment.scoringPolicy, other.scoringPolicy) });
+      const otherSubdivisionMap = getAssessmentSubdivisionMap(other.customSubdivisions, other.excludedSubdivisionKeys);
+      const comparison = summarizeAssessment(otherScores, otherSubdivisionMap);
+      return NextResponse.json({ ...summary, comparison, likeForLike: calculateEvidenceMatchedComparison(
+        subdivisions, otherScores, assessment.scoringPolicy, other.scoringPolicy, subdivisionMap, otherSubdivisionMap,
+      ) });
     }
     return NextResponse.json(summary);
   }
@@ -57,8 +63,14 @@ export async function POST(
   const results: DimensionScore[] = [];
 
   for (const dimSel of deepDims) {
-    const dimSubs = subScores.filter(s => s.dimensionKey === dimSel.dimensionKey);
-    const result = summarizeDimension(dimSel.dimensionKey, subScores);
+    const activeSubdivisions = getAssessmentSubdivisions(
+      dimSel.dimensionKey as DimensionKey,
+      assessment.customSubdivisions,
+      assessment.excludedSubdivisionKeys,
+    );
+    const activeKeys = new Set(activeSubdivisions.map(subdivision => subdivision.key));
+    const dimSubs = subScores.filter(s => s.dimensionKey === dimSel.dimensionKey && activeKeys.has(s.subdivisionKey));
+    const result = summarizeDimension(dimSel.dimensionKey, subScores, activeSubdivisions);
     const confidences = dimSubs
       .filter(s => s.normalizedScore !== null)
       .map(s => s.confidence);

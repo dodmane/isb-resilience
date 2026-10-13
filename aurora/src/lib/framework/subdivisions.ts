@@ -7,6 +7,10 @@ export interface Subdivision {
   evidenceHints: string[];
 }
 
+export interface AssessmentSubdivision extends Subdivision {
+  dimensionKey: DimensionKey;
+}
+
 export type SubdivisionMap = Record<DimensionKey, Subdivision[]>;
 
 export const SUBDIVISIONS: SubdivisionMap = {
@@ -314,4 +318,27 @@ export const SUBDIVISIONS: SubdivisionMap = {
 
 export function getSubdivisionsForDimension(dimensionKey: DimensionKey): Subdivision[] {
   return SUBDIVISIONS[dimensionKey] || [];
+}
+
+export function getAssessmentSubdivisions(
+  dimensionKey: DimensionKey,
+  customSubdivisions: AssessmentSubdivision[] = [],
+  excludedSubdivisionKeys: string[] = []
+): Subdivision[] {
+  const frameworkSubdivisions = getSubdivisionsForDimension(dimensionKey)
+    .filter(subdivision => !excludedSubdivisionKeys.includes(`${dimensionKey}:${subdivision.key}`));
+  const custom = customSubdivisions
+    .filter(subdivision => subdivision.dimensionKey === dimensionKey &&
+      !excludedSubdivisionKeys.includes(`${dimensionKey}:${subdivision.key}`));
+  return [...frameworkSubdivisions, ...custom];
+}
+
+export function getAssessmentSubdivisionMap(
+  customSubdivisions: AssessmentSubdivision[] = [],
+  excludedSubdivisionKeys: string[] = []
+): Record<DimensionKey, Subdivision[]> {
+  return Object.fromEntries(Object.keys(SUBDIVISIONS).map(key => [
+    key,
+    getAssessmentSubdivisions(key as DimensionKey, customSubdivisions, excludedSubdivisionKeys),
+  ])) as Record<DimensionKey, Subdivision[]>;
 }

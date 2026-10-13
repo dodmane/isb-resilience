@@ -10,7 +10,7 @@ import {
   getSubdivisionScores,
 } from '@/lib/db/store';
 import { summarizeAssessment } from '@/lib/framework/scoring';
-import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
+import { getAssessmentSubdivisionMap, getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 import { type DimensionKey } from '@/lib/framework/dimensions';
 import { getNextStage } from '@/lib/workflow/stages';
 import { type AssessmentStage, type ApprovalStatus, type StageApproval } from '@/types/assessment';
@@ -55,13 +55,15 @@ export async function POST(
   if (status === 'approved' && stage >= 6) {
     const scores = getSubdivisionScores(id);
     const selected = assessment.dimensionSelections.filter(selection => selection.deepAssessment);
-    const expected = selected.flatMap(selection => (SUBDIVISIONS[selection.dimensionKey as DimensionKey] || []).map(sub => ({ dimension: selection.dimensionKey, sub: sub.key })));
+    const expected = selected.flatMap(selection => getAssessmentSubdivisions(
+      selection.dimensionKey as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys,
+    ).map(sub => ({ dimension: selection.dimensionKey, sub: sub.key })));
     if (!expected.length || expected.some(item => !scores.some(score => score.dimensionKey === item.dimension && score.subdivisionKey === item.sub &&
       !!score.reviewedAt && !!score.reviewedBy && score.status !== 'stale' && score.status !== 'needs_review'))) {
       return NextResponse.json({ error: 'Review every selected sub-dimension with a Level/Position rating or explicitly leave it unscored.' }, { status: 409 });
     }
     if (stage >= 7) {
-      const summary = summarizeAssessment(scores);
+      const summary = summarizeAssessment(scores, getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys));
       if (summary.readiness.status !== 'review_ready') return NextResponse.json({ error: summary.readiness.blockers.join('; ') }, { status: 409 });
       if (getStageApprovals(id).find(approval => approval.stage === stage - 1)?.status !== 'approved') {
         return NextResponse.json({ error: 'The preceding stage requires a current approval' }, { status: 409 });

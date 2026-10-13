@@ -4,6 +4,7 @@ import { type CriterionFinding, type ScoringPolicy, type CriterionValidationIssu
 
 export type ScoringStatus = 'not_started' | 'insufficient_evidence' | 'scored' | 'overridden' | 'needs_review' | 'stale';
 export type RatingMethod = 'level_position' | 'criteria';
+export type RatingOrigin = 'ai_recommendation' | 'reviewer';
 
 export interface SubdivisionScore {
   id: string;
@@ -13,6 +14,9 @@ export interface SubdivisionScore {
   maturityLevel: MaturityLevel | null;
   position?: ScoringPosition | null;
   ratingMethod?: RatingMethod;
+  ratingOrigin?: RatingOrigin;
+  aiSuggestedMaturityLevel?: MaturityLevel | null;
+  aiSuggestedPosition?: ScoringPosition | null;
   criteria?: CriterionFinding[];
   extractionIssue?: CriterionValidationIssue;
   policy?: ScoringPolicy;

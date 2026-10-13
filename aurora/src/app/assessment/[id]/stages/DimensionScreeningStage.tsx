@@ -10,12 +10,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewCheckpoint } from '@/components/assessment/ReviewCheckpoint';
 import { AuditTrail } from '@/components/assessment/AuditTrail';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
-import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
+import { getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 import { SAAS_MATERIALITY } from '@/lib/framework/materiality';
 import { type DimensionKey } from '@/lib/framework/dimensions';
 import { type Assessment, type StageApproval, type DimensionSelection } from '@/types/assessment';
 import { type AuditEntry } from '@/types/audit';
 import { CheckCircle2, Circle, ChevronDown, ChevronRight } from 'lucide-react';
+
+const SELECTION_ORIGIN_STYLES = {
+  framework_default: { label: 'Framework default', className: 'border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-300' },
+  ai_recommendation: { label: 'AI recommendation', className: 'border-sky-300 text-sky-700 dark:border-sky-800 dark:text-sky-300' },
+  reviewer: { label: 'Reviewer edited', className: 'border-teal-300 text-teal-700 dark:border-teal-800 dark:text-teal-300' },
+};
 
 interface Props {
   assessment: Assessment;
@@ -37,6 +43,7 @@ export function DimensionScreeningStage({ assessment, approvals, auditTrail, onR
         selected: true,
         deepAssessment: mat.defaultSelected,
         relevanceRationale: mat.saasRelevance,
+        selectionOrigin: 'framework_default',
       };
     }
     return initial;
@@ -73,14 +80,14 @@ export function DimensionScreeningStage({ assessment, approvals, auditTrail, onR
   function toggleDeep(key: string) {
     setSelections(prev => ({
       ...prev,
-      [key]: { ...prev[key], deepAssessment: !prev[key].deepAssessment },
+      [key]: { ...prev[key], deepAssessment: !prev[key].deepAssessment, selectionOrigin: 'reviewer' },
     }));
   }
 
   function updateRationale(key: string, rationale: string) {
     setSelections(prev => ({
       ...prev,
-      [key]: { ...prev[key], relevanceRationale: rationale },
+      [key]: { ...prev[key], relevanceRationale: rationale, selectionOrigin: 'reviewer' },
     }));
   }
 
@@ -131,8 +138,17 @@ export function DimensionScreeningStage({ assessment, approvals, auditTrail, onR
           {selectedCount} of 15 selected for deep assessment
         </Badge>
         <Badge variant="outline" className="text-sm">
-          {selectedCount * 3} subdivisions
+          {Object.values(selections).filter(selection => selection.deepAssessment).reduce((count, selection) => count +
+            getAssessmentSubdivisions(selection.dimensionKey as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys).length, 0)} subdivisions
         </Badge>
+      </div>
+
+      <div aria-label="Dimension selection origin legend" className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Selection origin:</span>
+        {Object.entries(SELECTION_ORIGIN_STYLES).map(([origin, style]) => (
+          <Badge key={origin} variant="outline" className={style.className}>{style.label}</Badge>
+        ))}
+        <Badge variant="outline" className="text-muted-foreground">Origin not tracked</Badge>
       </div>
 
       <div className="space-y-3">
@@ -140,7 +156,7 @@ export function DimensionScreeningStage({ assessment, approvals, auditTrail, onR
           const sel = selections[dim.key];
           const mat = SAAS_MATERIALITY[dim.key];
           const isExpanded = expandedDim === dim.key;
-          const subs = SUBDIVISIONS[dim.key as DimensionKey];
+          const subs = getAssessmentSubdivisions(dim.key as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
           const sizeNote = assessment.companySize === 'small'
             ? mat.smallCompanyNote
             : assessment.companySize === 'large'
@@ -161,11 +177,18 @@ export function DimensionScreeningStage({ assessment, approvals, auditTrail, onR
                   </Button>
 
                   <div className="flex-1 min-w-0">
-                    <CardTitle className="text-sm flex items-center gap-2">
+                    <CardTitle className="text-sm flex flex-wrap items-center gap-2">
                       <span className="text-muted-foreground">{dim.number}.</span>
                       {dim.name}
                       {sel.deepAssessment && (
                         <Badge className="text-[10px] bg-primary/10 text-primary">Deep</Badge>
+                      )}
+                      {sel.selectionOrigin ? (
+                        <Badge variant="outline" className={`text-[10px] ${SELECTION_ORIGIN_STYLES[sel.selectionOrigin].className}`}>
+                          {SELECTION_ORIGIN_STYLES[sel.selectionOrigin].label}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground">Origin not tracked</Badge>
                       )}
                     </CardTitle>
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -202,7 +225,7 @@ export function DimensionScreeningStage({ assessment, approvals, auditTrail, onR
 
                   {sel.deepAssessment && subs && (
                     <div>
-                      <p className="text-sm font-medium mb-2">Three Structured Subdivisions</p>
+                      <p className="text-sm font-medium mb-2">Active Subdivisions ({subs.length})</p>
                       <div className="space-y-2">
                         {subs.map((sub, i) => (
                           <div key={sub.key} className="border rounded p-3">

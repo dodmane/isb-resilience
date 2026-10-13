@@ -1,6 +1,7 @@
 import { type Evidence, type EvidenceSourceType } from '@/types/evidence';
 import { v4 as uuidv4 } from 'uuid';
 import { isLLMConfigured, callLLMJSON } from './client';
+import { latestDataPriorityInstruction, prioritizeLatestEvidence } from './evidence-priority';
 
 export interface CompanyProfile {
   companyName: string;
@@ -29,7 +30,9 @@ async function discoverCompanyWithLLM(
   companyName: string,
   assessmentId: string
 ): Promise<DiscoveryResult> {
-  const systemPrompt = `You are a business research analyst for the AURORA Enterprise Business Resilience Framework. Your job is to discover factual company profile information using ONLY well-known public information. Do NOT fabricate URLs or data. If you are unsure, say so.`;
+  const systemPrompt = `You are a business research analyst for the AURORA Enterprise Business Resilience Framework. Your job is to discover factual company profile information using ONLY well-known public information. Do NOT fabricate URLs or data. If you are unsure, say so.
+
+${latestDataPriorityInstruction()}`;
 
   const userPrompt = `Research "${companyName}" and return a JSON object with:
 {
@@ -81,7 +84,7 @@ Return 3-5 evidence items covering different AURORA dimensions. Only include URL
       isMock: false,
     };
 
-    const evidence: Evidence[] = (result.evidence || []).map(ev => ({
+    const evidence: Evidence[] = prioritizeLatestEvidence((result.evidence || []).map(ev => ({
       id: uuidv4(),
       assessmentId,
       claim: ev.claim,
@@ -102,7 +105,7 @@ Return 3-5 evidence items covering different AURORA dimensions. Only include URL
       sourceOrigin: 'llm_research' as const,
       isMock: false,
       createdAt: now,
-    }));
+    })));
 
     return { profile, evidence };
   } catch (err) {

@@ -6,14 +6,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { SourceLink } from './SourceLink';
-import { type Evidence } from '@/types/evidence';
-import { CheckCircle2, XCircle, AlertTriangle, FlaskConical } from 'lucide-react';
+import { type Evidence, type EvidenceOrigin } from '@/types/evidence';
+import { CheckCircle2, XCircle, AlertTriangle, FlaskConical, Pencil } from 'lucide-react';
 
 interface EvidenceCardProps {
   evidence: Evidence;
   onAccept: (id: string) => void;
   onReject: (id: string, reason: string) => void;
   onViewDetail: (evidence: Evidence) => void;
+  onEdit?: (evidence: Evidence) => void;
 }
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
@@ -34,11 +35,18 @@ const STATUS_CONFIG = {
   rejected: { color: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200', label: 'Rejected' },
 };
 
-export function EvidenceCard({ evidence, onAccept, onReject, onViewDetail }: EvidenceCardProps) {
+const ORIGIN_CONFIG: Record<EvidenceOrigin, { label: string; className: string }> = {
+  llm_research: { label: 'AI researched', className: 'border-sky-300 text-sky-700 dark:border-sky-800 dark:text-sky-300' },
+  user_provided: { label: 'User provided', className: 'border-teal-300 text-teal-700 dark:border-teal-800 dark:text-teal-300' },
+  user_uploaded: { label: 'User uploaded', className: 'border-cyan-300 text-cyan-700 dark:border-cyan-800 dark:text-cyan-300' },
+};
+
+export function EvidenceCard({ evidence, onAccept, onReject, onViewDetail, onEdit }: EvidenceCardProps) {
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
 
   const statusConf = STATUS_CONFIG[evidence.status];
+  const originConf = ORIGIN_CONFIG[evidence.sourceOrigin];
 
   return (
     <Card className="relative card-hover shadow-sm">
@@ -53,6 +61,7 @@ export function EvidenceCard({ evidence, onAccept, onReject, onViewDetail }: Evi
       <CardHeader className="pb-2">
         <div className="flex items-start gap-2">
           <Badge className={`text-xs ${statusConf.color}`}>{statusConf.label}</Badge>
+          <Badge variant="outline" className={`text-xs ${originConf.className}`}>{originConf.label}</Badge>
           <Badge variant="outline" className="text-xs">
             {SOURCE_TYPE_LABELS[evidence.sourceType] || evidence.sourceType}
           </Badge>
@@ -86,6 +95,11 @@ export function EvidenceCard({ evidence, onAccept, onReject, onViewDetail }: Evi
         <Button variant="ghost" size="sm" onClick={() => onViewDetail(evidence)}>
           Details
         </Button>
+        {onEdit && evidence.status === 'accepted' && (
+          <Button type="button" variant="outline" size="sm" onClick={() => onEdit(evidence)}>
+            <Pencil className="h-3.5 w-3.5 mr-1" />Edit
+          </Button>
+        )}
         {evidence.status === 'proposed' && (
           <>
             <Button
