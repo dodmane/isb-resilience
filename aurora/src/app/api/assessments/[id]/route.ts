@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { getAssessment, updateAssessment, getStageApprovals, deleteAssessment, invalidateApprovalsAfterStage, addAuditEntry } from '@/lib/db/store';
+import { getAssessment, updateAssessment, getStageApprovals, deleteAssessment, invalidateApprovalsAfterStage, addAuditEntry } from '@/lib/db/repository';
 import { canAdvanceToStage } from '@/lib/workflow/stages';
 import { isCriterionReviewMode, getCriterionReviewMode } from '@/lib/framework/criteria';
 import { type AssessmentStage, type ScoringMethod } from '@/types/assessment';
@@ -10,11 +10,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
-  const approvals = getStageApprovals(id);
+  const approvals = (await getStageApprovals(id));
   return NextResponse.json({ assessment, approvals });
 }
 
@@ -23,7 +23,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -36,19 +36,19 @@ export async function PATCH(
   if ('scoringMethod' in body) {
     if (!isCriterionReviewMode(body.scoringMethod)) return NextResponse.json({ error: 'scoringMethod must be manual or llm_assisted' }, { status: 400 });
     const previousMethod: ScoringMethod = assessment.scoringMethod || getCriterionReviewMode(assessment.scoringPolicy);
-    const updated = updateAssessment(id, { scoringMethod: body.scoringMethod });
+    const updated = (await updateAssessment(id, { scoringMethod: body.scoringMethod }));
     if (previousMethod !== body.scoringMethod) {
-      invalidateApprovalsAfterStage(id, 5);
-      addAuditEntry({ id: uuidv4(), assessmentId: id, action: 'scoring_method_changed', entityType: 'assessment', entityId: id,
+      (await invalidateApprovalsAfterStage(id, 5));
+      (await addAuditEntry({ id: uuidv4(), assessmentId: id, action: 'scoring_method_changed', entityType: 'assessment', entityId: id,
         oldValue: { scoringMethod: previousMethod }, newValue: { scoringMethod: body.scoringMethod },
-        reason: 'Stage 6 scoring method changed; scoring approval reopened', actor: 'user', timestamp: new Date().toISOString() });
+        reason: 'Stage 6 scoring method changed; scoring approval reopened', actor: 'user', timestamp: new Date().toISOString() }));
     }
     return NextResponse.json(updated);
   }
 
   if (body.currentStage !== undefined) {
     const targetStage = body.currentStage as AssessmentStage;
-    const approvals = getStageApprovals(id);
+    const approvals = (await getStageApprovals(id));
     if (!canAdvanceToStage(targetStage, approvals)) {
       return NextResponse.json(
         { error: `Cannot advance to stage ${targetStage}. Previous stage not approved.` },
@@ -57,7 +57,7 @@ export async function PATCH(
     }
   }
 
-  const updated = updateAssessment(id, body);
+  const updated = (await updateAssessment(id, body));
   return NextResponse.json(updated);
 }
 
@@ -66,7 +66,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const deleted = deleteAssessment(id);
+  const deleted = (await deleteAssessment(id));
   if (!deleted) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }

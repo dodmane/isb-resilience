@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { getAssessment, getEvidenceById, updateEvidence, addAuditEntry } from '@/lib/db/store';
+import { getAssessment, getEvidenceById, updateEvidence, addAuditEntry } from '@/lib/db/repository';
 import { DIMENSIONS, type DimensionKey } from '@/lib/framework/dimensions';
 import { getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 import { type EvidenceSourceType, type EvidenceStatus } from '@/types/evidence';
@@ -20,7 +20,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; evidenceId: string }> }
 ) {
   const { id: assessmentId, evidenceId } = await params;
-  const evidence = getEvidenceById(evidenceId);
+  const evidence = (await getEvidenceById(evidenceId));
 
   if (!evidence || evidence.assessmentId !== assessmentId) {
     return NextResponse.json({ error: 'Evidence not found' }, { status: 404 });
@@ -32,7 +32,7 @@ export async function PATCH(
     rejectionReason?: string;
   };
 
-  const assessment = getAssessment(assessmentId);
+  const assessment = (await getAssessment(assessmentId));
   if (!assessment) return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
 
   if (status !== undefined && !['proposed', 'accepted', 'rejected'].includes(status)) {
@@ -100,13 +100,13 @@ export async function PATCH(
   const hasEdits = EDITABLE_FIELDS.some(field => field in body);
   if (!status && !hasEdits) return NextResponse.json({ error: 'Provide an evidence edit or status update' }, { status: 400 });
 
-  const updated = updateEvidence(evidenceId, updates);
+  const updated = (await updateEvidence(evidenceId, updates));
 
   const oldValue = Object.fromEntries(EDITABLE_FIELDS.map(field => [field, evidence[field]]).concat([['status', evidence.status]]));
   const newValue = Object.fromEntries(EDITABLE_FIELDS.map(field => [field, updated?.[field]]).concat([['status', updated?.status]]));
   if (rejectionReason !== undefined) newValue.rejectionReason = rejectionReason;
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId,
     action: status ? `evidence_${status}` : 'evidence_updated',
@@ -117,7 +117,7 @@ export async function PATCH(
     reason: rejectionReason || (hasEdits ? 'Evidence details edited by reviewer' : `Evidence ${status}`),
     actor: 'user',
     timestamp: new Date().toISOString(),
-  });
+  }));
 
   return NextResponse.json(updated);
 }

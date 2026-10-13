@@ -15,7 +15,7 @@ describe('Phase 2 Workflow Integration', () => {
   const assessmentId = uuidv4();
 
   beforeAll(() => {
-    const storePath = path.join(process.cwd(), '.aurora-data', 'store.json');
+    const storePath = path.join(process.env.AURORA_DATA_DIR!, 'store.json');
     if (existsSync(storePath)) {
       const store = JSON.parse(readFileSync(storePath, 'utf-8'));
       if (store.assessments.find((a: Assessment) => a.id === assessmentId)) return;

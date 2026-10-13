@@ -7,7 +7,7 @@ import {
   upsertSubdivisionScore,
   addAuditEntry,
   invalidateApprovalsAfterStage,
-} from '@/lib/db/store';
+} from '@/lib/db/repository';
 import { recommendSubdivisionRatingAsync } from '@/lib/llm/rating-recommendation';
 import { RATING_PROMPT_VERSION } from '@/lib/llm/rating-recommendation';
 import { isLLMConfigured, getScoringModel } from '@/lib/llm/client';
@@ -24,7 +24,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const scores = getSubdivisionScores(id);
+  const scores = (await getSubdivisionScores(id));
   return NextResponse.json(scores);
 }
 
@@ -34,7 +34,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -43,8 +43,8 @@ export async function POST(
     return NextResponse.json({ error: 'Manual review is selected. Enter Level and Position in each sub-dimension; AI suggestions are disabled.' }, { status: 409 });
   }
 
-  const evidence = getEvidenceForAssessment(id);
-  const existing = getSubdivisionScores(id);
+  const evidence = (await getEvidenceForAssessment(id));
+  const existing = (await getSubdivisionScores(id));
   const deepDims = (assessment.dimensionSelections || []).filter(s => s.deepAssessment);
   const now = new Date().toISOString();
   const newScores: SubdivisionScore[] = [];
@@ -93,13 +93,13 @@ export async function POST(
         updatedAt: now,
       };
 
-      upsertSubdivisionScore(score);
+      (await upsertSubdivisionScore(score));
       newScores.push(score);
     }
   }
 
-  invalidateApprovalsAfterStage(id, 5);
-  addAuditEntry({
+  (await invalidateApprovalsAfterStage(id, 5));
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'subdivision_scoring_generated',
@@ -110,7 +110,7 @@ export async function POST(
     reason: 'Level/Position ratings suggested from accepted evidence; reviewer confirmation required',
     actor: 'system',
     timestamp: now,
-  });
+  }));
 
   return NextResponse.json(newScores);
 }
@@ -123,7 +123,7 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
   if (body.ratingMethod === 'level_position') {
-    const assessment = getAssessment(id);
+    const assessment = (await getAssessment(id));
     if (!assessment) return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
     const { dimensionKey, subdivisionKey, maturityLevel, position, evidenceIds, rationale, reviewedBy, confidence, overrideReason } = body as {
       dimensionKey: string; subdivisionKey: string; maturityLevel: number | null; position: ScoringPosition | null;
@@ -140,7 +140,7 @@ export async function PATCH(
     if (typeof reviewedBy !== 'string' || !reviewedBy.trim()) {
       return NextResponse.json({ error: 'Reviewer name is required' }, { status: 400 });
     }
-    const allEvidence = getEvidenceForAssessment(id).filter(item => item.dimensionKey === dimensionKey && item.subdivisionKey === subdivisionKey);
+    const allEvidence = (await getEvidenceForAssessment(id)).filter(item => item.dimensionKey === dimensionKey && item.subdivisionKey === subdivisionKey);
     const acceptedEvidence = allEvidence.filter(item => item.status === 'accepted' && !item.isMock);
     const selectedIds = Array.isArray(evidenceIds) ? [...new Set(evidenceIds.filter((value): value is string => typeof value === 'string'))] : [];
     if (!isUnscored && (!selectedIds.length || selectedIds.some(evidenceId => !acceptedEvidence.some(item => item.id === evidenceId)))) {
@@ -150,7 +150,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Confidence must be high, medium or low.' }, { status: 400 });
     }
 
-    const existing = getSubdivisionScores(id).find(item => item.dimensionKey === dimensionKey && item.subdivisionKey === subdivisionKey);
+    const existing = (await getSubdivisionScores(id)).find(item => item.dimensionKey === dimensionKey && item.subdivisionKey === subdivisionKey);
     const now = new Date().toISOString();
     const linkedEvidence = acceptedEvidence.filter(item => selectedIds.includes(item.id));
     const level = isUnscored ? null : maturityLevel as 1 | 2 | 3 | 4;
@@ -178,12 +178,12 @@ export async function PATCH(
       extractionModel: existing?.extractionModel || 'manual', promptVersion: SCORING_PROMPT_VERSION,
       isMockRecommendation: false, createdAt: existing?.createdAt || now, updatedAt: now,
     };
-    upsertSubdivisionScore(rating);
-    invalidateApprovalsAfterStage(id, 5);
-    addAuditEntry({ id: uuidv4(), assessmentId: id, action: isAiOverride ? 'subdivision_rating_overridden' : 'subdivision_rating_confirmed', entityType: 'subdivision_score', entityId: rating.id,
+    (await upsertSubdivisionScore(rating));
+    (await invalidateApprovalsAfterStage(id, 5));
+    (await addAuditEntry({ id: uuidv4(), assessmentId: id, action: isAiOverride ? 'subdivision_rating_overridden' : 'subdivision_rating_confirmed', entityType: 'subdivision_score', entityId: rating.id,
       oldValue: existing ? { maturityLevel: existing.maturityLevel, position: existing.position, status: existing.status } : null,
       newValue: { maturityLevel: rating.maturityLevel, position: rating.position, normalizedScore: rating.normalizedScore, aiSuggestedMaturityLevel, aiSuggestedPosition, ratingOrigin: rating.ratingOrigin, evidenceIds: rating.evidenceIds, reviewedBy: rating.reviewedBy, overrideReason: rating.overrideReason },
-      reason: rating.overrideReason || rating.rationale, actor: 'user', timestamp: now });
+      reason: rating.overrideReason || rating.rationale, actor: 'user', timestamp: now }));
     return NextResponse.json(rating);
   }
 
@@ -196,7 +196,7 @@ export async function PATCH(
     reviewedBy: string;
   };
 
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -221,7 +221,7 @@ export async function PATCH(
   }
   if (typeof reviewedBy !== 'string' || !reviewedBy.trim()) return NextResponse.json({ error: 'Reviewer name is required', validationIssue: {
     criterionId: null, fields: ['reviewer'], message: 'Enter the reviewer name.' } }, { status: 400 });
-  const subEvidence = getEvidenceForAssessment(id).filter(e =>
+  const subEvidence = (await getEvidenceForAssessment(id)).filter(e =>
     e.dimensionKey === dimensionKey && e.subdivisionKey === subdivisionKey
   );
   let result;
@@ -238,7 +238,7 @@ export async function PATCH(
       criterionId: null, fields: ['endpointException'], message: 'The reviewed criteria must support Level 1 for a 0-2 exception, or Level 4 for a 98-100 exception.' } }, { status: 400 });
   }
 
-  const existing = getSubdivisionScores(id);
+  const existing = (await getSubdivisionScores(id));
   const current = existing.find(
     s => s.dimensionKey === dimensionKey && s.subdivisionKey === subdivisionKey
   );
@@ -271,10 +271,10 @@ export async function PATCH(
     updatedAt: now,
   };
 
-  upsertSubdivisionScore(score);
-  invalidateApprovalsAfterStage(id, 5);
+  (await upsertSubdivisionScore(score));
+  (await invalidateApprovalsAfterStage(id, 5));
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'criterion_review_completed',
@@ -285,7 +285,7 @@ export async function PATCH(
     reason: overrideReason || 'Score override',
     actor: 'user',
     timestamp: now,
-  });
+  }));
 
   return NextResponse.json(score);
 }

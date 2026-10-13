@@ -4,7 +4,7 @@ import {
   getEvidenceForAssessment,
   createEvidence,
   getAssessment,
-} from '@/lib/db/store';
+} from '@/lib/db/repository';
 import { type Evidence, type EvidenceSourceType } from '@/types/evidence';
 
 export async function GET(
@@ -12,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const evidence = getEvidenceForAssessment(id);
+  const evidence = (await getEvidenceForAssessment(id));
   return NextResponse.json(evidence);
 }
 
@@ -21,7 +21,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -63,6 +63,6 @@ export async function POST(
     createdAt: now,
   };
 
-  createEvidence(evidence);
+  (await createEvidence(evidence));
   return NextResponse.json(evidence, { status: 201 });
 }

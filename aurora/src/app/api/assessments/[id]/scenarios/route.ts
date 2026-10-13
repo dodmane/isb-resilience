@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { getAssessment, updateAssessment, addAuditEntry } from '@/lib/db/store';
+import { getAssessment, updateAssessment, addAuditEntry } from '@/lib/db/repository';
 import { generateScenarioNarratives } from '@/lib/llm/scenarios';
 
 export async function POST(
@@ -8,7 +8,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -19,9 +19,9 @@ export async function POST(
     assessment.companySize || 'medium'
   );
 
-  updateAssessment(id, { scenarioNarratives: narratives });
+  (await updateAssessment(id, { scenarioNarratives: narratives }));
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'scenario_narratives_generated',
@@ -32,7 +32,7 @@ export async function POST(
     reason: 'Scenario narratives generated via mock AI',
     actor: 'system',
     timestamp: new Date().toISOString(),
-  });
+  }));
 
   return NextResponse.json({ narratives });
 }

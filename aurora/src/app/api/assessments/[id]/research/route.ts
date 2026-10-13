@@ -5,7 +5,7 @@ import {
   getEvidenceForAssessment,
   createEvidence,
   addAuditEntry,
-} from '@/lib/db/store';
+} from '@/lib/db/repository';
 import { researchEvidence } from '@/lib/llm/research';
 import { getAssessmentSubdivisionMap } from '@/lib/framework/subdivisions';
 
@@ -14,7 +14,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -23,7 +23,7 @@ export async function POST(
     return NextResponse.json({ error: 'No evidence plan configured' }, { status: 400 });
   }
 
-  const existing = getEvidenceForAssessment(id);
+  const existing = (await getEvidenceForAssessment(id));
 
   const result = await researchEvidence(
     id,
@@ -34,10 +34,10 @@ export async function POST(
   );
 
   for (const ev of result.evidence) {
-    createEvidence(ev);
+    (await createEvidence(ev));
   }
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'evidence_research_executed',
@@ -48,7 +48,7 @@ export async function POST(
     reason: 'Evidence research completed via mock AI',
     actor: 'system',
     timestamp: new Date().toISOString(),
-  });
+  }));
 
   return NextResponse.json({
     newEvidence: result.evidence,

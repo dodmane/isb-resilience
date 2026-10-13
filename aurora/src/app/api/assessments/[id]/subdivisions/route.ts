@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { getAssessment, updateAssessment, addAuditEntry, invalidateApprovalsAfterStage } from '@/lib/db/store';
+import { getAssessment, updateAssessment, addAuditEntry, invalidateApprovalsAfterStage } from '@/lib/db/repository';
 import { DIMENSIONS, type DimensionKey } from '@/lib/framework/dimensions';
 import { SUBDIVISIONS, getAssessmentSubdivisions, type AssessmentSubdivision } from '@/lib/framework/subdivisions';
 import { type EvidencePlanItem } from '@/types/assessment';
@@ -10,7 +10,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
 
   const body = await request.json();
@@ -83,13 +83,13 @@ export async function PUT(
   }
 
   const changed = JSON.stringify(previousActive) !== JSON.stringify(nextActive);
-  updateAssessment(id, { customSubdivisions: normalizedCustom, excludedSubdivisionKeys, evidencePlan, evidencePlanInitialized: true });
-  if (changed) invalidateApprovalsAfterStage(id, 3);
-  addAuditEntry({
+  (await updateAssessment(id, { customSubdivisions: normalizedCustom, excludedSubdivisionKeys, evidencePlan, evidencePlanInitialized: true }));
+  if (changed) (await invalidateApprovalsAfterStage(id, 3));
+  (await addAuditEntry({
     id: uuidv4(), assessmentId: id, action: 'assessment_subdivisions_updated', entityType: 'assessment', entityId: id,
     oldValue: { customSubdivisions: assessment.customSubdivisions || [], excludedSubdivisionKeys: assessment.excludedSubdivisionKeys || [] },
     newValue: { customSubdivisions: normalizedCustom, excludedSubdivisionKeys, addedKeys },
     reason: 'Assessment sub-dimension scope updated', actor: 'user', timestamp: new Date().toISOString(),
-  });
+  }));
   return NextResponse.json({ customSubdivisions: normalizedCustom, excludedSubdivisionKeys, evidencePlan });
 }

@@ -1,6 +1,7 @@
 /** @type {import('jest').Config} */
 const config = {
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/src/__tests__/setup-storage.ts'],
   transform: {
     '^.+\\.[jt]sx?$': ['ts-jest', {
       tsconfig: 'tsconfig.json',

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { getAssessment, createEvidence, addAuditEntry } from '@/lib/db/store';
+import { getAssessment, createEvidence, addAuditEntry } from '@/lib/db/repository';
 import { type Evidence, type EvidenceSourceType } from '@/types/evidence';
 
 export async function POST(
@@ -8,7 +8,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -52,9 +52,9 @@ export async function POST(
     createdAt: now,
   };
 
-  createEvidence(evidence);
+  (await createEvidence(evidence));
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'evidence_uploaded',
@@ -65,7 +65,7 @@ export async function POST(
     reason: `Document uploaded: ${file.name}`,
     actor: 'user',
     timestamp: now,
-  });
+  }));
 
   return NextResponse.json(evidence, { status: 201 });
 }

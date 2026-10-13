@@ -8,7 +8,7 @@ import {
   getResilienceGaps,
   setResilienceGaps,
   addAuditEntry,
-} from '@/lib/db/store';
+} from '@/lib/db/repository';
 import { generateResilienceGaps } from '@/lib/framework/resilience';
 
 export async function GET(
@@ -16,7 +16,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const gaps = getResilienceGaps(id);
+  const gaps = (await getResilienceGaps(id));
   return NextResponse.json(gaps);
 }
 
@@ -25,19 +25,19 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
 
-  const dimScores = getDimensionScores(id);
-  const scenarioAssessments = getScenarioAssessments(id);
-  const evidence = getEvidenceForAssessment(id);
+  const dimScores = (await getDimensionScores(id));
+  const scenarioAssessments = (await getScenarioAssessments(id));
+  const evidence = (await getEvidenceForAssessment(id));
 
   const gaps = generateResilienceGaps(id, dimScores, scenarioAssessments, evidence);
-  setResilienceGaps(id, gaps);
+  (await setResilienceGaps(id, gaps));
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'resilience_gaps_generated',
@@ -48,7 +48,7 @@ export async function POST(
     reason: 'Resilience gaps identified from scoring and scenario analysis',
     actor: 'system',
     timestamp: new Date().toISOString(),
-  });
+  }));
 
   return NextResponse.json(gaps);
 }

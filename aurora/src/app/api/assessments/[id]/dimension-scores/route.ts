@@ -9,7 +9,7 @@ import {
   invalidateApprovalsAfterStage,
   getEvidenceForAssessment,
   getAuditTrail,
-} from '@/lib/db/store';
+} from '@/lib/db/repository';
 import { summarizeDimension, summarizeAssessment, calculateEvidenceMatchedComparison } from '@/lib/framework/scoring';
 import { aggregateConfidence } from '@/lib/llm/scoring-recommendation';
 import { type DimensionScore } from '@/types/scoring';
@@ -21,19 +21,19 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   if (request.nextUrl.searchParams.get('summary') === 'true') {
-    const subdivisions = getSubdivisionScores(id);
+    const subdivisions = (await getSubdivisionScores(id));
     const subdivisionMap = getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys);
     const summary = summarizeAssessment(subdivisions, subdivisionMap);
     if (request.nextUrl.searchParams.get('export') === 'true') return NextResponse.json({ ...summary, policy: assessment.scoringPolicy || null,
-      companyName: assessment.companyName, generatedAt: new Date().toISOString(), ratings: subdivisions, evidence: getEvidenceForAssessment(id), audit: getAuditTrail(id) });
+      companyName: assessment.companyName, generatedAt: new Date().toISOString(), ratings: subdivisions, evidence: (await getEvidenceForAssessment(id)), audit: (await getAuditTrail(id)) });
     const comparisonId = request.nextUrl.searchParams.get('compareWith');
     if (comparisonId) {
-      const other = getAssessment(comparisonId);
+      const other = (await getAssessment(comparisonId));
       if (!other) return NextResponse.json({ error: 'Comparison assessment not found' }, { status: 404 });
-      const otherScores = getSubdivisionScores(comparisonId);
+      const otherScores = (await getSubdivisionScores(comparisonId));
       const otherSubdivisionMap = getAssessmentSubdivisionMap(other.customSubdivisions, other.excludedSubdivisionKeys);
       const comparison = summarizeAssessment(otherScores, otherSubdivisionMap);
       return NextResponse.json({ ...summary, comparison, likeForLike: calculateEvidenceMatchedComparison(
@@ -42,7 +42,7 @@ export async function GET(
     }
     return NextResponse.json(summary);
   }
-  const scores = getDimensionScores(id);
+  const scores = (await getDimensionScores(id));
   return NextResponse.json(scores);
 }
 
@@ -52,12 +52,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
 
-  const subScores = getSubdivisionScores(id);
+  const subScores = (await getSubdivisionScores(id));
   const deepDims = (assessment.dimensionSelections || []).filter(s => s.deepAssessment);
   const now = new Date().toISOString();
   const results: DimensionScore[] = [];
@@ -90,12 +90,12 @@ export async function POST(
       updatedAt: now,
     };
 
-    upsertDimensionScore(score);
+    (await upsertDimensionScore(score));
     results.push(score);
   }
 
-  invalidateApprovalsAfterStage(id, 6);
-  addAuditEntry({
+  (await invalidateApprovalsAfterStage(id, 6));
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'dimension_scores_calculated',
@@ -106,7 +106,7 @@ export async function POST(
     reason: 'Dimension scores calculated from subdivision averages',
     actor: 'system',
     timestamp: now,
-  });
+  }));
 
   return NextResponse.json(results);
 }

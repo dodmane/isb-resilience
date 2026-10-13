@@ -8,7 +8,7 @@ import {
   addAuditEntry,
   invalidateApprovalsAfterStage,
   getSubdivisionScores,
-} from '@/lib/db/store';
+} from '@/lib/db/repository';
 import { summarizeAssessment } from '@/lib/framework/scoring';
 import { getAssessmentSubdivisionMap, getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 import { type DimensionKey } from '@/lib/framework/dimensions';
@@ -20,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const approvals = getStageApprovals(id);
+  const approvals = (await getStageApprovals(id));
   return NextResponse.json(approvals);
 }
 
@@ -29,7 +29,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -53,7 +53,7 @@ export async function POST(
   }
 
   if (status === 'approved' && stage >= 6) {
-    const scores = getSubdivisionScores(id);
+    const scores = (await getSubdivisionScores(id));
     const selected = assessment.dimensionSelections.filter(selection => selection.deepAssessment);
     const expected = selected.flatMap(selection => getAssessmentSubdivisions(
       selection.dimensionKey as DimensionKey, assessment.customSubdivisions, assessment.excludedSubdivisionKeys,
@@ -65,7 +65,7 @@ export async function POST(
     if (stage >= 7) {
       const summary = summarizeAssessment(scores, getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys));
       if (summary.readiness.status !== 'review_ready') return NextResponse.json({ error: summary.readiness.blockers.join('; ') }, { status: 409 });
-      if (getStageApprovals(id).find(approval => approval.stage === stage - 1)?.status !== 'approved') {
+      if ((await getStageApprovals(id)).find(approval => approval.stage === stage - 1)?.status !== 'approved') {
         return NextResponse.json({ error: 'The preceding stage requires a current approval' }, { status: 409 });
       }
     }
@@ -81,9 +81,9 @@ export async function POST(
     notes: notes || '',
   };
 
-  upsertStageApproval(approval);
+  (await upsertStageApproval(approval));
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: `stage_${status}`,
@@ -94,19 +94,19 @@ export async function POST(
     reason: notes || `Stage ${stage} ${status}`,
     actor: 'user',
     timestamp: now,
-  });
+  }));
 
   if (status === 'approved') {
     const nextStage = getNextStage(stage);
     if (nextStage && nextStage > assessment.currentStage) {
-      updateAssessment(id, { currentStage: nextStage });
+      (await updateAssessment(id, { currentStage: nextStage }));
     }
   }
 
   if (status === 'rejected') {
-    invalidateApprovalsAfterStage(id, stage);
+    (await invalidateApprovalsAfterStage(id, stage));
   }
 
-  const approvals = getStageApprovals(id);
+  const approvals = (await getStageApprovals(id));
   return NextResponse.json(approvals);
 }

@@ -7,7 +7,7 @@ import {
   getScenarioAssessments,
   upsertScenarioAssessment,
   addAuditEntry,
-} from '@/lib/db/store';
+} from '@/lib/db/repository';
 import { SCENARIOS } from '@/lib/framework/scenarios';
 import { type ScenarioKey } from '@/lib/framework/scenarios';
 import { generateScenarioReasoningAsync } from '@/lib/llm/scenario-reasoning';
@@ -19,7 +19,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessments = getScenarioAssessments(id);
+  const assessments = (await getScenarioAssessments(id));
   return NextResponse.json(assessments);
 }
 
@@ -29,14 +29,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
 
-  const dimScores = getDimensionScores(id);
-  const evidence = getEvidenceForAssessment(id);
-  const existing = getScenarioAssessments(id);
+  const dimScores = (await getDimensionScores(id));
+  const evidence = (await getEvidenceForAssessment(id));
+  const existing = (await getScenarioAssessments(id));
   const now = new Date().toISOString();
   const results: ScenarioAssessment[] = [];
 
@@ -77,12 +77,12 @@ export async function POST(
         updatedAt: now,
       };
 
-      upsertScenarioAssessment(sa);
+      (await upsertScenarioAssessment(sa));
       results.push(sa);
     }
   }
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'scenario_assessments_generated',
@@ -93,7 +93,7 @@ export async function POST(
     reason: 'Scenario stress-test assessments generated via mock AI',
     actor: 'system',
     timestamp: now,
-  });
+  }));
 
   return NextResponse.json(results);
 }
@@ -126,7 +126,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Override reason required when changing scenario maturity' }, { status: 400 });
   }
 
-  const existing = getScenarioAssessments(id);
+  const existing = (await getScenarioAssessments(id));
   const current = existing.find(
     s => s.scenarioKey === scenarioKey && s.dimensionKey === dimensionKey
   );
@@ -150,10 +150,10 @@ export async function PATCH(
     updatedAt: now,
   };
 
-  upsertScenarioAssessment(updated);
+  (await upsertScenarioAssessment(updated));
 
   const action = userApproved ? 'scenario_assessment_approved' : 'scenario_assessment_overridden';
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action,
@@ -164,7 +164,7 @@ export async function PATCH(
     reason: overrideReason || `Scenario assessment ${action}`,
     actor: 'user',
     timestamp: now,
-  });
+  }));
 
   return NextResponse.json(updated);
 }

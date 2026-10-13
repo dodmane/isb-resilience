@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { createAssessment, getAllAssessments } from '@/lib/db/store';
+import { createAssessment, getAllAssessments } from '@/lib/db/repository';
 import { type Assessment, type DataSourceMode } from '@/types/assessment';
 
 export async function GET() {
-  const assessments = getAllAssessments();
+  const assessments = (await getAllAssessments());
   return NextResponse.json(assessments);
 }
 
@@ -36,6 +36,6 @@ export async function POST(request: NextRequest) {
     updatedAt: now,
   };
 
-  createAssessment(assessment);
+  (await createAssessment(assessment));
   return NextResponse.json(assessment, { status: 201 });
 }

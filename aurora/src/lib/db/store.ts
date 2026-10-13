@@ -11,7 +11,7 @@ import { normalize, subdivisionNumericScore, summarizeDimension, scoreToMaturity
 import { evaluateCriteria, validPolicy, evidenceSnapshot } from '@/lib/framework/criteria';
 import { getAssessmentSubdivisionMap, getAssessmentSubdivisions } from '@/lib/framework/subdivisions';
 
-const DATA_DIR = path.join(process.cwd(), '.aurora-data');
+const DATA_DIR = process.env.AURORA_DATA_DIR || path.join(process.cwd(), '.aurora-data');
 
 interface StoreData {
   assessments: Assessment[];
@@ -94,8 +94,12 @@ export function deleteAssessment(id: string): boolean {
 export function getStageApprovals(assessmentId: string): StageApproval[] {
   const store = readStore();
   const assessment = store.assessments.find(item => item.id === assessmentId);
-  const governed = validPolicy(assessment?.scoringPolicy);
   const scores = getSubdivisionScores(assessmentId);
+  return validateStageApprovals(assessment, store.stageApprovals.filter(item => item.assessmentId === assessmentId), scores);
+}
+
+export function validateStageApprovals(assessment: Assessment | undefined, approvals: StageApproval[], scores: SubdivisionScore[]): StageApproval[] {
+  const governed = validPolicy(assessment?.scoringPolicy);
   const activeSubdivisionKeys = new Set(Object.entries(getAssessmentSubdivisionMap(
     assessment?.customSubdivisions, assessment?.excludedSubdivisionKeys,
   )).flatMap(([dimensionKey, subdivisions]) => subdivisions.map(subdivision => `${dimensionKey}:${subdivision.key}`)));
@@ -103,7 +107,7 @@ export function getStageApprovals(assessmentId: string): StageApproval[] {
     scores.some(score => score.ratingMethod === 'level_position');
   const invalid = (!governed && !usesDirectRatings) || scores.some(score => activeSubdivisionKeys.has(`${score.dimensionKey}:${score.subdivisionKey}`) &&
     (score.status === 'stale' || score.status === 'needs_review'));
-  return store.stageApprovals.filter((a) => a.assessmentId === assessmentId).map(approval =>
+  return approvals.map(approval =>
     invalid && approval.stage >= 6 && approval.status === 'approved' ? { ...approval, status: 'pending', approvedAt: null } : approval);
 }
 
@@ -178,9 +182,17 @@ export function addAuditEntry(entry: AuditEntry): AuditEntry {
 // Subdivision Scores
 export function getSubdivisionScores(assessmentId: string): SubdivisionScore[] {
   const store = readStore();
-  const policy = store.assessments.find(item => item.id === assessmentId)?.scoringPolicy;
-  return (store.subdivisionScores || []).filter((s) => s.assessmentId === assessmentId).map((score) => {
-    const evidence = store.evidence.filter(item => item.assessmentId === assessmentId && item.dimensionKey === score.dimensionKey && item.subdivisionKey === score.subdivisionKey);
+  return validateSubdivisionScores(
+    store.assessments.find(item => item.id === assessmentId),
+    (store.subdivisionScores || []).filter(item => item.assessmentId === assessmentId),
+    store.evidence.filter(item => item.assessmentId === assessmentId),
+  );
+}
+
+export function validateSubdivisionScores(assessment: Assessment | undefined, scores: SubdivisionScore[], assessmentEvidence: Evidence[]): SubdivisionScore[] {
+  const policy = assessment?.scoringPolicy;
+  return scores.map((score) => {
+    const evidence = assessmentEvidence.filter(item => item.dimensionKey === score.dimensionKey && item.subdivisionKey === score.subdivisionKey);
     const stale = (reason: string): SubdivisionScore => ({ ...score, normalizedScore: null, maturityLevel: null, absoluteScore: null, status: 'stale', staleReason: reason });
     if (score.ratingMethod === 'level_position') {
       const linkedEvidence = evidence.filter(item => score.evidenceIds.includes(item.id));

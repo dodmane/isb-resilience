@@ -84,6 +84,22 @@ docker compose down
 Your assessment data is stored in a Docker volume and is kept when the
 container is stopped.
 
+## Cloud Run Persistence
+
+Cloud Run uses Firestore automatically, rather than its temporary container
+filesystem. Assessments, evidence metadata, approvals, scores, scenarios, gaps,
+and audit history survive instance replacement and redeployment. Final reports
+are reconstructed from those saved records. Uploaded document files are not
+archived.
+
+Before deploying, create a Firestore Native database and grant its access role
+to the Cloud Run runtime service account. See
+[Cloud Run and Firestore Setup](docs/cloud-run-persistence.md) for the required
+configuration and a persistence verification checklist.
+
+Local development and Docker Compose continue to use JSON storage by default.
+Tests use isolated temporary directories and do not erase local assessments.
+
 ## Updating AURORA
 
 Download the newest project ZIP from GitHub, replace the old `aurora` folder,

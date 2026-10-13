@@ -5,7 +5,7 @@ import {
   updateAssessment,
   createEvidence,
   addAuditEntry,
-} from '@/lib/db/store';
+} from '@/lib/db/repository';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(
@@ -13,7 +13,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const assessment = getAssessment(id);
+  const assessment = (await getAssessment(id));
   if (!assessment) {
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
@@ -23,19 +23,19 @@ export async function POST(
 
   const result = await discoverCompany(companyName, id);
 
-  updateAssessment(id, {
+  (await updateAssessment(id, {
     companyName: result.profile.companyName,
     companyDescription: result.profile.companyDescription,
     industry: result.profile.industry,
     companySize: result.profile.companySize,
     discoveryIsMock: result.profile.isMock,
-  });
+  }));
 
   for (const ev of result.evidence) {
-    createEvidence(ev);
+    (await createEvidence(ev));
   }
 
-  addAuditEntry({
+  (await addAuditEntry({
     id: uuidv4(),
     assessmentId: id,
     action: 'company_discovery',
@@ -46,7 +46,7 @@ export async function POST(
     reason: result.profile.isMock ? 'Company discovery used heuristic fallback' : 'Company discovery completed via LLM',
     actor: 'system',
     timestamp: new Date().toISOString(),
-  });
+  }));
 
   return NextResponse.json({
     profile: result.profile,

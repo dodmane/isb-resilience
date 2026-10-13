@@ -3,7 +3,7 @@ import { writeFileSync, existsSync } from 'fs';
 import path from 'path';
 
 // Override data dir before importing store
-const TEST_DATA_DIR = path.join(process.cwd(), '.aurora-data-test');
+const TEST_DATA_DIR = process.env.AURORA_DATA_DIR!;
 
 // Must set env before dynamic import
 process.env.AURORA_DATA_DIR = TEST_DATA_DIR;
@@ -36,7 +36,7 @@ describe('Store & Evidence', () => {
 
   beforeAll(() => {
     // Clear any existing test data
-    const storePath = path.join(process.cwd(), '.aurora-data', 'store.json');
+    const storePath = path.join(TEST_DATA_DIR, 'store.json');
     if (existsSync(storePath)) {
       // Write a clean store
       writeFileSync(storePath, JSON.stringify({
