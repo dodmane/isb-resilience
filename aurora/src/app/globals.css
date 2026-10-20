@@ -140,3 +140,13 @@
     @apply transition-all duration-200 hover:shadow-md hover:border-primary/30;
   }
 }
+
+@media print {
+  #aurora-dashboard [data-slot="tabs-list"] {
+    display: none !important;
+  }
+
+  #aurora-dashboard [data-slot="tabs-content"][hidden] {
+    display: block !important;
+  }
+}

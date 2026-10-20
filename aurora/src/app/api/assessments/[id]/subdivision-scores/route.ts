@@ -30,7 +30,7 @@ export async function GET(
 
 // Generate recommendations for all subdivisions
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -45,7 +45,13 @@ export async function POST(
 
   const evidence = (await getEvidenceForAssessment(id));
   const existing = (await getSubdivisionScores(id));
-  const deepDims = (assessment.dimensionSelections || []).filter(s => s.deepAssessment);
+  const body = await request.json().catch(() => ({})) as { dimensionKey?: unknown };
+  const deepDims = (assessment.dimensionSelections || []).filter(s => s.deepAssessment &&
+    (typeof body.dimensionKey !== 'string' || s.dimensionKey === body.dimensionKey));
+  if (typeof body.dimensionKey === 'string' && !deepDims.some(selection => selection.dimensionKey === body.dimensionKey)) {
+    return NextResponse.json({ error: 'Dimension is not selected for deep assessment' }, { status: 400 });
+  }
+  if (!deepDims.length) return NextResponse.json({ error: 'No dimensions are selected for deep assessment' }, { status: 400 });
   const now = new Date().toISOString();
   const newScores: SubdivisionScore[] = [];
 

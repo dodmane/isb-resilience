@@ -23,7 +23,7 @@ import { type Evidence } from '@/types/evidence';
 import { type SubdivisionScore } from '@/types/scoring';
 import { type AuditEntry } from '@/types/audit';
 import {
-  FlaskConical, ChevronDown, ChevronRight, AlertTriangle, Edit3, CheckCircle2, Clock3, RotateCcw, Plus, Trash2,
+  FlaskConical, ChevronDown, ChevronRight, AlertTriangle, Edit3, CheckCircle2, Clock3, RotateCcw, Plus, Trash2, Sparkles,
 } from 'lucide-react';
 
 interface Props {
@@ -39,6 +39,7 @@ export function SubdivisionScoringStage({
   assessment, approvals, evidence, subdivisionScores, auditTrail, onRefresh,
 }: Props) {
   const [generating, setGenerating] = useState(false);
+  const [generatingDimension, setGeneratingDimension] = useState<string | null>(null);
   const [expandedDim, setExpandedDim] = useState<string | null>(null);
   const [overrideTarget, setOverrideTarget] = useState<{ dim: string; sub: string } | null>(null);
   const [scoreError, setScoreError] = useState('');
@@ -66,18 +67,33 @@ export function SubdivisionScoringStage({
   const hasScores = subdivisionScores.length > 0;
   const reviewMode: ScoringMethod = assessment.scoringMethod || (assessment.scoringPolicy?.reviewMode === 'manual' ? 'manual' : 'llm_assisted');
 
-  async function generateScores() {
+  async function generateScores(dimensionKey?: string) {
     setGenerating(true);
+    setGeneratingDimension(dimensionKey || null);
+    setScoreError('');
+    let refreshInProgress = false;
+    const refreshTimer = window.setInterval(() => {
+      if (refreshInProgress) return;
+      refreshInProgress = true;
+      void onRefresh().catch(console.error).finally(() => { refreshInProgress = false; });
+    }, 3000);
     try {
-      const response = await fetch(`/api/assessments/${assessment.id}/subdivision-scores`, { method: 'POST' });
+      const response = await fetch(`/api/assessments/${assessment.id}/subdivision-scores`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dimensionKey ? { dimensionKey } : {}),
+      });
       if (!response.ok) throw new Error((await response.json()).error || 'Could not generate ratings');
-      setScoreError('');
-      await onRefresh();
+      const generated = await response.json();
+      setScoreError(generated.length ? '' : 'No new AI suggestions were generated. Check accepted evidence for this dimension.');
     } catch (err) {
       console.error('Failed to generate scores:', err);
       setScoreError(err instanceof Error ? err.message : 'Could not generate ratings');
     } finally {
+      window.clearInterval(refreshTimer);
+      await onRefresh().catch(console.error);
       setGenerating(false);
+      setGeneratingDimension(null);
     }
   }
 
@@ -262,7 +278,7 @@ export function SubdivisionScoringStage({
       </div>
       <ScoringMethodControl assessment={assessment} onRefresh={onRefresh} />
       {scoreError && <p role="alert" className="text-sm text-destructive">{scoreError}</p>}
-      {hasScores && reviewMode === 'llm_assisted' && <Button variant="outline" onClick={generateScores} disabled={generating}>
+      {hasScores && reviewMode === 'llm_assisted' && <Button variant="outline" onClick={() => generateScores()} disabled={generating}>
         {generating ? 'Getting AI suggestions...' : 'Get AI Suggestions for Unreviewed Ratings'}
       </Button>}
       {hasScores && reviewMode === 'llm_assisted' && (
@@ -304,14 +320,14 @@ export function SubdivisionScoringStage({
 
       {!hasScores && reviewMode === 'llm_assisted' && (
         <div className="text-center py-8">
-          <Button onClick={generateScores} disabled={generating} size="lg">
+          <Button onClick={() => generateScores()} disabled={generating} size="lg">
             {generating ? 'Getting AI Suggestions...' : 'Get AI Rating Suggestions'}
           </Button>
           <p className="text-xs text-muted-foreground mt-2">AI suggests Level and Position where accepted evidence supports a rating. You confirm or edit every suggestion.</p>
         </div>
       )}
 
-      {(hasScores || reviewMode === 'manual') && (
+      {(hasScores || reviewMode === 'manual' || deepDimensions.length > 0) && (
         <>
           {manualReviewItems.length > 0 && (
             <div role="status" className="flex items-start gap-2 text-xs text-amber-700">
@@ -363,6 +379,13 @@ export function SubdivisionScoringStage({
                         );
                       })}
                     </div>
+                    {reviewMode === 'llm_assisted' && (
+                      <Button type="button" size="sm" variant="outline" disabled={generating}
+                        onClick={event => { event.stopPropagation(); void generateScores(dim.key); }}>
+                        <Sparkles className="mr-1 h-3.5 w-3.5" />
+                        {generatingDimension === dim.key ? 'Generating...' : 'Get AI suggestions'}
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
 
