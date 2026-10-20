@@ -1,4 +1,5 @@
-import { normalize, scoreToMaturity, calculateDimensionScore, calculateComposite, calculateLikeForLike, subdivisionNumericScore, summarizeDimension, summarizeAssessment } from '@/lib/framework/scoring';
+import { normalize, scoreToMaturity, calculateDimensionScore, calculateComposite, calculateLikeForLike, calculateEvidenceMatchedComparison, subdivisionNumericScore, summarizeDimension, summarizeAssessment } from '@/lib/framework/scoring';
+import { SUBDIVISIONS } from '@/lib/framework/subdivisions';
 import { type MaturityLevel } from '@/types/assessment';
 import { type SubdivisionScore } from '@/types/scoring';
 
@@ -45,6 +46,25 @@ describe('Workbook scoring', () => {
     const second = { ...first, 'dimension-0': calculateDimensionScore([null, null, null]) };
     expect(calculateLikeForLike(first, second).dimensionKeys).toHaveLength(11);
     expect(calculateLikeForLike(first, second).first.normalizedScore).toBe(63);
+  });
+  it('returns evidence-matched score and maturity pairs for each shared dimension', () => {
+    const [firstSubdivision, secondSubdivision] = SUBDIVISIONS.liquidity_runway;
+    const first = [
+      rating({ subdivisionKey: firstSubdivision.key }),
+      rating({ subdivisionKey: secondSubdivision.key }),
+    ];
+    const second = [
+      rating({ subdivisionKey: firstSubdivision.key, maturityLevel: 2 }),
+      rating({ subdivisionKey: secondSubdivision.key, maturityLevel: 2 }),
+    ];
+
+    const result = calculateEvidenceMatchedComparison(first, second);
+
+    expect(result.ready).toBe(true);
+    expect(result.dimensions.liquidity_runway.first.normalizedScore).toBe(63);
+    expect(result.dimensions.liquidity_runway.first.maturityLevel).toBe(3);
+    expect(result.dimensions.liquidity_runway.second.normalizedScore).toBe(38);
+    expect(result.dimensions.liquidity_runway.second.maturityLevel).toBe(2);
   });
   it('counts omitted rows as missing and excludes unknown subdivision keys', () => {
     const result = summarizeDimension('liquidity_runway', [rating(), rating({ subdivisionKey: 'unknown' })]);

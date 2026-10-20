@@ -159,6 +159,10 @@ export function calculateEvidenceMatchedComparison(
     !ready ? 'Comparison requires at least one shared qualifying dimension and no endpoint exceptions' :
       directWithoutPolicies ? 'Matched sub-dimensions. Reporting periods are not recorded; verify that the evidence covers comparable periods.' :
         'Matched sub-dimensions and reporting periods';
-  return { ...result, compatible, periodsComparable: policiesMatch, matchedCount, ready, reason,
+  const dimensions = ready ? Object.fromEntries(result.dimensionKeys.map(key => [key, {
+    first: firstDimensions[key]!,
+    second: secondDimensions[key]!,
+  }])) : {};
+  return { ...result, dimensions, compatible, periodsComparable: policiesMatch, matchedCount, ready, reason,
     first: ready ? result.first : calculateComposite([]), second: ready ? result.second : calculateComposite([]) };
 }

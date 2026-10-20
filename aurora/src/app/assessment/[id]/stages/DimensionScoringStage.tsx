@@ -72,6 +72,9 @@ export function DimensionScoringStage({
   }, [assessment.dimensionSelections]);
 
   const hasScores = dimensionScores.length > 0;
+  const comparableDimensions = comparison
+    ? deepDimensions.filter(dimension => comparison.dimensionKeys.includes(dimension.key))
+    : [];
 
   async function calculateScores() {
     setCalculating(true);
@@ -139,12 +142,74 @@ export function DimensionScoringStage({
             )}
           </select>
         </label>
-        {comparisonId && comparison && <div className="text-sm space-y-1">
-          <p>Like-for-like: {comparison.dimensionKeys.length}/15 shared dimensions</p>
-          <p>{comparison.matchedCount}/45 matched sub-dimensions · {comparison.reason}</p>
-          <p>{assessment.companyName}: {comparison.first.normalizedScore?.toFixed(1) ?? 'Insufficient coverage'}</p>
-          <p>{companies.find(company => company.id === comparisonId)?.companyName}: {comparison.second.normalizedScore?.toFixed(1) ?? 'Insufficient coverage'}</p>
-        </div>}
+        {comparisonId && comparison && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900 dark:bg-sky-950/30">
+                <p className="text-xs font-medium text-sky-900 dark:text-sky-200">{assessment.companyName} · like-for-like composite</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <span className="text-2xl font-semibold tabular-nums">{comparison.first.normalizedScore?.toFixed(1) ?? '—'}</span>
+                  <MaturityBadge level={comparison.first.maturityLevel} />
+                </div>
+              </div>
+              <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+                <p className="text-xs font-medium text-emerald-900 dark:text-emerald-200">{companies.find(company => company.id === comparisonId)?.companyName || 'Selected assessment'} · like-for-like composite</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <span className="text-2xl font-semibold tabular-nums">{comparison.second.normalizedScore?.toFixed(1) ?? '—'}</span>
+                  <MaturityBadge level={comparison.second.maturityLevel} />
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {comparison.dimensionKeys.length} shared dimensions · {comparison.matchedCount} matched sub-dimensions · {comparison.reason}
+            </p>
+            {comparison.ready && comparableDimensions.length > 0 ? (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Dimension-by-dimension comparison</CardTitle>
+                  <CardDescription>Scores and maturity use only sub-dimensions rated in both assessments.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[620px] text-sm">
+                      <thead>
+                        <tr className="border-b text-xs text-muted-foreground">
+                          <th rowSpan={2} className="py-2 text-left font-medium">Dimension</th>
+                          <th colSpan={2} className="py-2 text-center font-medium text-sky-800 dark:text-sky-300">{assessment.companyName}</th>
+                          <th colSpan={2} className="py-2 text-center font-medium text-emerald-800 dark:text-emerald-300">{companies.find(company => company.id === comparisonId)?.companyName || 'Selected assessment'}</th>
+                        </tr>
+                        <tr className="border-b text-xs text-muted-foreground">
+                          <th className="py-2 text-center font-medium">Maturity</th>
+                          <th className="py-2 text-center font-medium">Score</th>
+                          <th className="py-2 text-center font-medium">Maturity</th>
+                          <th className="py-2 text-center font-medium">Score</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comparableDimensions.map(dimension => {
+                          const matched = comparison.dimensions[dimension.key];
+                          return (
+                            <tr key={dimension.key} className="border-b last:border-0">
+                              <th className="py-2 text-left font-medium">{dimension.number}. {dimension.name}</th>
+                              <td className="py-2 text-center"><MaturityBadge level={matched.first.maturityLevel} /></td>
+                              <td className="py-2 text-center font-mono tabular-nums">{matched.first.normalizedScore?.toFixed(1) ?? '—'}</td>
+                              <td className="py-2 text-center"><MaturityBadge level={matched.second.maturityLevel} /></td>
+                              <td className="py-2 text-center font-mono tabular-nums">{matched.second.normalizedScore?.toFixed(1) ?? '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <p role="status" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                A side-by-side comparison is unavailable. {comparison.ready ? 'No selected dimensions have shared matched scores.' : comparison.reason}
+              </p>
+            )}
+          </div>
+        )}
         {comparisonId && !comparison && !error && <p className="text-xs text-muted-foreground">Loading comparison...</p>}
       </section>
       {hasScores && <Button variant="outline" onClick={calculateScores} disabled={calculating}>
