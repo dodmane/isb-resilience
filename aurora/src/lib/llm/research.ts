@@ -11,21 +11,24 @@ export interface ResearchResult {
   searchSummary: string;
 }
 
+export type EvidenceBatchHandler = (evidence: Evidence[]) => Promise<void>;
+
 export async function researchEvidence(
   assessmentId: string,
   companyName: string,
   plan: EvidencePlanItem[],
   existingEvidence: Evidence[],
-  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>> = SUBDIVISIONS
+  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>> = SUBDIVISIONS,
+  onEvidenceBatch?: EvidenceBatchHandler
 ): Promise<ResearchResult> {
   if (isLLMConfigured()) {
     try {
-      return await researchWithLLM(assessmentId, companyName, plan, existingEvidence, assessmentSubdivisions);
+      return await researchWithLLM(assessmentId, companyName, plan, existingEvidence, assessmentSubdivisions, onEvidenceBatch);
     } catch (err) {
       console.error('LLM research failed, falling back to mock:', err);
     }
   }
-  return researchMock(assessmentId, companyName, plan, existingEvidence, assessmentSubdivisions);
+  return researchMock(assessmentId, companyName, plan, existingEvidence, assessmentSubdivisions, onEvidenceBatch);
 }
 
 async function researchWithLLM(
@@ -33,7 +36,8 @@ async function researchWithLLM(
   companyName: string,
   plan: EvidencePlanItem[],
   existingEvidence: Evidence[],
-  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>>
+  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>>,
+  onEvidenceBatch?: EvidenceBatchHandler
 ): Promise<ResearchResult> {
   const allEvidence: Evidence[] = [];
   const now = new Date().toISOString();
@@ -86,6 +90,7 @@ RULES:
         sourceUrl: item.sourceUrl,
         status: item.status,
       }));
+    const dimensionEvidence: Evidence[] = [];
 
     const userPrompt = `Research "${companyName}" for AURORA dimension: ${dim?.name || dimKey}
 Description: ${dim?.description || ''}
@@ -136,7 +141,7 @@ Return ONLY evidence you can back with a real public source. Skip subdivisions w
         ));
         if (isDuplicate) continue;
 
-        allEvidence.push({
+        dimensionEvidence.push({
           id: uuidv4(),
           assessmentId,
           claim: r.claim,
@@ -162,6 +167,10 @@ Return ONLY evidence you can back with a real public source. Skip subdivisions w
     } catch (err) {
       console.error(`LLM research failed for dimension ${dimKey}:`, err);
     }
+    for (const item of dimensionEvidence) {
+      if (onEvidenceBatch) await onEvidenceBatch([item]);
+      allEvidence.push(item);
+    }
   }
 
   return {
@@ -170,13 +179,14 @@ Return ONLY evidence you can back with a real public source. Skip subdivisions w
   };
 }
 
-function researchMock(
+async function researchMock(
   assessmentId: string,
   companyName: string,
   plan: EvidencePlanItem[],
   existingEvidence: Evidence[],
-  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>>
-): ResearchResult {
+  assessmentSubdivisions: Partial<Record<DimensionKey, Subdivision[]>>,
+  onEvidenceBatch?: EvidenceBatchHandler
+): Promise<ResearchResult> {
   const evidence: Evidence[] = [];
   const now = new Date().toISOString();
 
@@ -185,6 +195,7 @@ function researchMock(
   const isDocusign = key.includes('docusign');
 
   for (const item of plan) {
+    const batchStart = evidence.length;
     const dimKey = item.dimensionKey as DimensionKey;
     const subs = assessmentSubdivisions[dimKey] || [];
 
@@ -219,6 +230,8 @@ function researchMock(
         }
       }
     }
+    const batch = evidence.slice(batchStart);
+    if (batch.length && onEvidenceBatch) await onEvidenceBatch(batch);
   }
 
   return {

@@ -14,6 +14,7 @@ export interface CompanyProfile {
 export interface DiscoveryResult {
   profile: CompanyProfile;
   evidence: Evidence[];
+  diagnostic?: string;
 }
 
 export async function discoverCompany(
@@ -109,8 +110,9 @@ Return 3-5 evidence items covering different AURORA dimensions. Only include URL
 
     return { profile, evidence };
   } catch (err) {
-    console.error('LLM discovery failed, falling back to mock:', err);
-    return discoverCompanyMock(companyName, assessmentId);
+    const diagnostic = err instanceof Error ? err.message : 'Unknown LLM discovery error';
+    console.error(`LLM discovery failed, falling back to mock.\n${diagnostic}`);
+    return { ...discoverCompanyMock(companyName, assessmentId), diagnostic };
   }
 }
 

@@ -41,6 +41,9 @@ interface Props {
 
 export function EvidenceGatheringStage({ assessment, approvals, evidence, auditTrail, onRefresh }: Props) {
   const [researching, setResearching] = useState(false);
+  const [researchingDimension, setResearchingDimension] = useState<string | null>(null);
+  const [researchSummary, setResearchSummary] = useState('');
+  const [researchError, setResearchError] = useState('');
   const [drawerEvidence, setDrawerEvidence] = useState<Evidence | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -89,15 +92,35 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
     return { total, accepted, rejected, pending, mock };
   }, [evidence]);
 
-  async function runResearch() {
+  async function runResearch(dimensionKey?: string) {
     setResearching(true);
+    setResearchingDimension(dimensionKey || null);
+    setResearchSummary('');
+    setResearchError('');
+    let refreshInProgress = false;
+    const refreshTimer = window.setInterval(() => {
+      if (refreshInProgress) return;
+      refreshInProgress = true;
+      void onRefresh().catch(console.error).finally(() => { refreshInProgress = false; });
+    }, 3000);
     try {
-      await fetch(`/api/assessments/${assessment.id}/research`, { method: 'POST' });
-      await onRefresh();
+      const response = await fetch(`/api/assessments/${assessment.id}/research`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dimensionKey ? { dimensionKey } : {}),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Evidence research failed (HTTP ${response.status}).`);
+      setResearchSummary(result.summary || 'Evidence research completed.');
     } catch (err) {
-      console.error('Research failed:', err);
+      const message = err instanceof Error ? err.message : 'Evidence research failed.';
+      setResearchError(message);
+      console.error('Research failed:', message);
     } finally {
+      window.clearInterval(refreshTimer);
+      await onRefresh().catch(console.error);
       setResearching(false);
+      setResearchingDimension(null);
     }
   }
 
@@ -210,7 +233,7 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
 
       {/* Action bar */}
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={runResearch} disabled={researching}>
+        <Button onClick={() => runResearch()} disabled={researching}>
           <Search className="h-4 w-4 mr-1" />
           {researching ? 'Researching...' : 'Find More Evidence'}
         </Button>
@@ -244,6 +267,9 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
         </div>
       </div>
 
+      {researchSummary && <p role="status" className="text-sm text-muted-foreground">{researchSummary}</p>}
+      {researchError && <p role="alert" className="text-sm text-destructive whitespace-pre-wrap break-words">{researchError}</p>}
+
       {hasMissingEvidence && (
         <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
           <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
@@ -268,6 +294,11 @@ export function EvidenceGatheringStage({ assessment, approvals, evidence, auditT
               <CardTitle className="text-base flex items-center gap-2">
                 <span className="text-muted-foreground">{dim.number}.</span>
                 {dim.name}
+                <Button type="button" size="sm" variant="outline" className="ml-auto shrink-0"
+                  onClick={() => runResearch(dim.key)} disabled={researching}>
+                  <Search className="mr-1 h-3.5 w-3.5" />
+                  {researchingDimension === dim.key ? 'Searching...' : 'Find evidence'}
+                </Button>
                 <Badge variant="outline" className="ml-auto text-xs">
                   {dimEvidence.length} items
                 </Badge>

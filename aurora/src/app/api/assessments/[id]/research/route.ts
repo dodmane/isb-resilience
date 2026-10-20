@@ -10,7 +10,7 @@ import { researchEvidence } from '@/lib/llm/research';
 import { getAssessmentSubdivisionMap } from '@/lib/framework/subdivisions';
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -19,7 +19,16 @@ export async function POST(
     return NextResponse.json({ error: 'Assessment not found' }, { status: 404 });
   }
 
-  if (!assessment.evidencePlan?.length) {
+  const body = await request.json().catch(() => ({})) as { dimensionKey?: unknown };
+  const dimensionKey = typeof body.dimensionKey === 'string' ? body.dimensionKey : undefined;
+  if (dimensionKey && !assessment.dimensionSelections.some(selection =>
+    selection.deepAssessment && selection.dimensionKey === dimensionKey
+  )) {
+    return NextResponse.json({ error: 'Dimension is not selected for deep assessment' }, { status: 400 });
+  }
+
+  const plan = (assessment.evidencePlan || []).filter(item => !dimensionKey || item.dimensionKey === dimensionKey);
+  if (!plan.length) {
     return NextResponse.json({ error: 'No evidence plan configured' }, { status: 400 });
   }
 
@@ -28,14 +37,13 @@ export async function POST(
   const result = await researchEvidence(
     id,
     assessment.companyName,
-    assessment.evidencePlan,
+    plan,
     existing,
-    getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys)
+    getAssessmentSubdivisionMap(assessment.customSubdivisions, assessment.excludedSubdivisionKeys),
+    async batch => {
+      for (const ev of batch) await createEvidence(ev);
+    }
   );
-
-  for (const ev of result.evidence) {
-    (await createEvidence(ev));
-  }
 
   (await addAuditEntry({
     id: uuidv4(),

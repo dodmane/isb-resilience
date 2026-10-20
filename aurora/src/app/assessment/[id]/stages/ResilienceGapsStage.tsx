@@ -11,7 +11,7 @@ import { MaturityBadge } from '@/components/assessment/MaturityBadge';
 import { SourceLink } from '@/components/assessment/SourceLink';
 import { AuditTrail } from '@/components/assessment/AuditTrail';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
-import { SCENARIOS } from '@/lib/framework/scenarios';
+import { SCENARIOS, scenarioAxisLabel } from '@/lib/framework/scenarios';
 import { type Assessment, type StageApproval } from '@/types/assessment';
 import { type Evidence } from '@/types/evidence';
 import { type ResilienceGap } from '@/types/resilience';
@@ -135,6 +135,8 @@ export function ResilienceGapsStage({ assessment, approvals, resilienceGaps, evi
               grouped[cls].map(gap => {
                 const dim = DIMENSIONS.find(d => d.key === gap.dimensionKey);
                 const scenario = SCENARIOS.find(s => s.key === gap.scenarioKey);
+                const scenarioLabel = scenario ? scenarioAxisLabel(scenario) : gap.scenarioKey;
+                const displayScenarioText = (text: string) => scenario ? text.replaceAll(scenario.name, scenarioLabel) : text;
                 const gapEvidence = getEvidence(gap.supportingEvidenceIds);
 
                 return (
@@ -144,7 +146,7 @@ export function ResilienceGapsStage({ assessment, approvals, resilienceGaps, evi
                         {CLASS_CONFIG[gap.classification].icon}
                         {dim?.name || gap.dimensionKey}
                         <Badge variant="outline" className="text-[10px] ml-auto">
-                          {scenario?.name || gap.scenarioKey}
+                          {scenarioLabel}
                         </Badge>
                       </CardTitle>
                     </CardHeader>
@@ -163,17 +165,17 @@ export function ResilienceGapsStage({ assessment, approvals, resilienceGaps, evi
 
                       <div className="bg-muted/50 rounded p-3 text-xs">
                         <p className="font-medium mb-1">Gap</p>
-                        <p>{gap.gapDescription}</p>
+                        <p>{displayScenarioText(gap.gapDescription)}</p>
                       </div>
 
                       <div className="bg-red-50 dark:bg-red-950/20 rounded p-3 text-xs border border-red-200 dark:border-red-800">
                         <p className="font-medium mb-1 text-red-800 dark:text-red-200">Business Implication</p>
-                        <p className="text-red-700 dark:text-red-300">{gap.businessImplication}</p>
+                        <p className="text-red-700 dark:text-red-300">{displayScenarioText(gap.businessImplication)}</p>
                       </div>
 
                       <div className="bg-blue-50 dark:bg-blue-950/20 rounded p-3 text-xs border border-blue-200 dark:border-blue-800">
                         <p className="font-medium mb-1 text-blue-800 dark:text-blue-200">Leadership Recommendation</p>
-                        <p className="text-blue-700 dark:text-blue-300">{gap.recommendation}</p>
+                        <p className="text-blue-700 dark:text-blue-300">{displayScenarioText(gap.recommendation)}</p>
                       </div>
 
                       {gapEvidence.length > 0 && (

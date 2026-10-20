@@ -51,5 +51,6 @@ export async function POST(
   return NextResponse.json({
     profile: result.profile,
     evidence: result.evidence,
+    diagnostic: result.diagnostic || null,
   });
 }

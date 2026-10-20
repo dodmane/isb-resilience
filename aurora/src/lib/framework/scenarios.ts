@@ -42,3 +42,9 @@ export const SCENARIOS: Scenario[] = [
     description: 'Limited AI productivity lift combined with worsening external conditions increases pressure on growth, margins, liquidity and resilience.',
   },
 ];
+
+export function scenarioAxisLabel(scenario: Pick<Scenario, 'aiDepth' | 'macroDisruption'>): string {
+  const aiDepth = scenario.aiDepth === 'high' ? 'High AI' : 'Low AI';
+  const macroConditions = scenario.macroDisruption === 'stable' ? 'Stable Macro' : 'High Macro Disruption';
+  return `${aiDepth} · ${macroConditions}`;
+}

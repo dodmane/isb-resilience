@@ -3,7 +3,7 @@ import { type ScenarioAssessment } from '@/types/scenario';
 import { type Evidence } from '@/types/evidence';
 import { type ResilienceGap, type ResilienceClassification } from '@/types/resilience';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
-import { SCENARIOS } from '@/lib/framework/scenarios';
+import { SCENARIOS, scenarioAxisLabel } from '@/lib/framework/scenarios';
 import { v4 as uuidv4 } from 'uuid';
 
 export function classifyDimension(
@@ -49,6 +49,7 @@ export function generateResilienceGaps(
     for (const sa of dimSAs) {
       if (sa.scenarioMaturity === null || sa.direction !== 'weakens') continue;
       const scenario = SCENARIOS.find(s => s.key === sa.scenarioKey);
+      const scenarioLabel = scenario ? scenarioAxisLabel(scenario) : sa.scenarioKey;
       const dimEvidence = evidence.filter(
         e => e.dimensionKey === dimScore.dimensionKey && e.status === 'accepted'
       );
@@ -61,9 +62,9 @@ export function generateResilienceGaps(
         currentMaturity: dimScore.maturityLevel,
         scenarioKey: sa.scenarioKey,
         scenarioMaturity: sa.scenarioMaturity,
-        gapDescription: `${dim.name} weakens from Level ${dimScore.maturityLevel} to Level ${sa.scenarioMaturity} under ${scenario?.name || sa.scenarioKey}. ${sa.rationale}`,
-        businessImplication: generateImplication(dim.name, dimScore.maturityLevel, sa.scenarioMaturity, scenario?.name || ''),
-        recommendation: generateRecommendation(dim.name, classification, scenario?.name || ''),
+        gapDescription: `${dim.name} weakens from Level ${dimScore.maturityLevel} to Level ${sa.scenarioMaturity} under ${scenarioLabel}. ${sa.rationale}`,
+        businessImplication: generateImplication(dim.name, dimScore.maturityLevel, sa.scenarioMaturity, scenarioLabel),
+        recommendation: generateRecommendation(dim.name, classification, scenarioLabel),
         supportingEvidenceIds: dimEvidence.map(e => e.id),
         classification,
         createdAt: now,

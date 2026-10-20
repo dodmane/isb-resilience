@@ -14,6 +14,7 @@ import { AuditTrail } from '@/components/assessment/AuditTrail';
 import { EvaluationReadiness, SubdimensionScoringReport } from '@/components/assessment/ScoringGovernance';
 import { DIMENSIONS } from '@/lib/framework/dimensions';
 import { SCENARIOS } from '@/lib/framework/scenarios';
+import { scenarioAxisLabel } from '@/lib/framework/scenarios';
 import { classifyDimension } from '@/lib/framework/resilience';
 import { generateEarlyWarningIndicators } from '@/lib/framework/resilience';
 import { type Assessment, type StageApproval } from '@/types/assessment';
@@ -230,7 +231,7 @@ export function FinalDashboardStage({
               <tr className="border-b">
                 <th className="text-left py-2">Dimension</th>
                 <th className="text-center py-2">Base</th>
-                {SCENARIOS.map(s => <th key={s.key} className="text-center py-2">{s.name}</th>)}
+                {SCENARIOS.map(s => <th key={s.key} className="text-center py-2">{scenarioAxisLabel(s)}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -333,7 +334,7 @@ export function FinalDashboardStage({
                   <div key={i} className="border rounded p-3 text-xs">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium">{dim?.name}</span>
-                      <Badge variant="outline" className="text-[10px]">{scenario?.name || 'Base'}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{scenario ? scenarioAxisLabel(scenario) : 'Base'}</Badge>
                     </div>
                     <p className="text-muted-foreground"><span className="font-medium">Monitor:</span> {ew.indicator}</p>
                     <p className="text-red-600 dark:text-red-400"><span className="font-medium">Trigger:</span> {ew.trigger}</p>
@@ -361,6 +362,7 @@ export function FinalDashboardStage({
               {selectedGaps.filter(g => g.classification !== 'strong').map(gap => {
                 const dim = DIMENSIONS.find(d => d.key === gap.dimensionKey);
                 const scenario = SCENARIOS.find(s => s.key === gap.scenarioKey);
+                const scenarioLabel = scenario ? scenarioAxisLabel(scenario) : 'Base';
                 return (
                   <div key={gap.id} className="border rounded p-3 text-xs space-y-2">
                     <div className="flex items-center gap-2">
@@ -368,7 +370,7 @@ export function FinalDashboardStage({
                         ? <ShieldAlert className="h-3.5 w-3.5 text-red-600" />
                         : <ShieldQuestion className="h-3.5 w-3.5 text-amber-600" />}
                       <span className="font-medium">{dim?.name}</span>
-                      <Badge variant="outline" className="text-[10px]">{scenario?.name || 'Base'}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{scenarioLabel}</Badge>
                       <span className="ml-auto">
                         <MaturityBadge level={gap.currentMaturity as 1|2|3|4|null} /> → <MaturityBadge level={gap.scenarioMaturity as 1|2|3|4|null} />
                       </span>

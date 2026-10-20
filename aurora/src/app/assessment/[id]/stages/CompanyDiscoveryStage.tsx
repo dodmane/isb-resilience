@@ -56,6 +56,7 @@ export function CompanyDiscoveryStage({
   const [industry, setIndustry] = useState(assessment.industry);
   const [companySize, setCompanySize] = useState<CompanySize | null>(assessment.companySize);
   const [discovering, setDiscovering] = useState(false);
+  const [discoveryDiagnostic, setDiscoveryDiagnostic] = useState('');
   const [discovered, setDiscovered] = useState(!!assessment.companyDescription);
   const [drawerEvidence, setDrawerEvidence] = useState<Evidence | null>(null);
   const [editingEvidence, setEditingEvidence] = useState<Evidence | null>(null);
@@ -112,6 +113,7 @@ export function CompanyDiscoveryStage({
 
   async function runDiscovery() {
     setDiscovering(true);
+    setDiscoveryDiagnostic('');
     try {
       const res = await fetch(`/api/assessments/${assessment.id}/discover`, {
         method: 'POST',
@@ -119,13 +121,15 @@ export function CompanyDiscoveryStage({
         body: JSON.stringify({ companyName }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Company discovery failed.');
       setDescription(data.profile.companyDescription);
       setIndustry(data.profile.industry);
       setCompanySize(data.profile.companySize);
+      setDiscoveryDiagnostic(data.diagnostic || '');
       setDiscovered(true);
       await onRefresh();
     } catch (err) {
-      console.error('Discovery failed:', err);
+      setDiscoveryDiagnostic(err instanceof Error ? err.message : 'Company discovery failed.');
     } finally {
       setDiscovering(false);
     }
@@ -257,11 +261,20 @@ export function CompanyDiscoveryStage({
           </div>
 
           {discovered && usedDiscoveryFallback && (
-              <div className="flex items-center gap-2 text-xs text-amber-600">
+              <div className="space-y-2 text-xs text-amber-700">
+                <div className="flex items-center gap-2">
                 <FlaskConical className="h-3.5 w-3.5" />
                 <span>
-                  Some results used heuristic fallback. If unexpected, check that the API key or proxy token is valid for the configured base URL.
+                  Mock fallback used; live public research did not complete.
                 </span>
+                </div>
+                {discoveryDiagnostic && (
+                  <details className="rounded border border-amber-300 p-2 text-foreground">
+                    <summary className="cursor-pointer font-medium">Technical details and safe cURL</summary>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all text-[11px]">{discoveryDiagnostic}</pre>
+                    <p className="mt-2 text-[11px] text-muted-foreground">The cURL template references $ANTHROPIC_API_KEY and intentionally does not include the secret.</p>
+                  </details>
+                )}
               </div>
           )}
 
